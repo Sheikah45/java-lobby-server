@@ -1,0 +1,18 @@
+quarkus:
+  log:
+    level: INFO
+  devservices:
+    enabled: false
+  application:
+    name: java-lobby-server
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+"%dev":
+  quarkus:
+    live-reload:
+      instrumentation: true
+    log:
+      category:
+        "com.faforever":
+          level: DEBUG
