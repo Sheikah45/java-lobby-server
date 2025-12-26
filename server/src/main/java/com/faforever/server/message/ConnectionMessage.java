@@ -21,7 +21,7 @@ public sealed interface ConnectionMessage {
     record AuthenticateRequest(
             String token,
             String uniqueId
-    ) implements ConnectionMessage.Client {}
+    ) implements Client {}
 
     record SessionResponse(
             long session

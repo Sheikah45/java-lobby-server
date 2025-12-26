@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 import org.jspecify.annotations.Nullable;
 
-import java.io.Serializable;
 import java.util.Objects;
 import java.util.Random;
 

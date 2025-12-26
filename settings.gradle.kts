@@ -11,3 +11,7 @@ pluginManagement {
     }
 }
 rootProject.name = "java-lobby-server"
+
+include("deployment")
+include("runtime")
+include("server")
