@@ -19,14 +19,20 @@ public sealed interface SocialMessage  {
     ) implements Server, LobbyMessage.Broadcast {}
 
     record AvatarInfoList(
-            Collection<AvatarInfo> avatars
+            @JsonProperty("avatarlist") Collection<AvatarInfo> avatars
     ) implements Server {}
 
     record SocialInfo(
             Collection<String> channels,
             @JsonProperty("friends") Collection<Integer> friendIds,
             @JsonProperty("foes") Collection<Integer> foeIds
-    ) {}
+    ) implements Server {
+
+        @JsonProperty("autojoin")
+        Collection<String> autojoin() {
+            return channels;
+        }
+    }
 
     record SocialAddRequest(
             @JsonProperty("friend")
@@ -61,6 +67,6 @@ public sealed interface SocialMessage  {
     record ListAvatarsRequest() implements AvatarRequest {}
 
     record SelectAvatarRequest(
-            @Nullable String avatar
+            @JsonProperty("avatar") @Nullable String avatarUrl
     ) implements AvatarRequest {}
 }

@@ -1,4 +1,4 @@
-package com.faforever.server.websocket;
+package com.faforever.server.endpoint.websocket;
 
 import com.faforever.server.connection.LobbyConnection;
 import com.faforever.server.message.LobbyMessage;
@@ -14,5 +14,10 @@ public class LobbyJsonWebsocketConnection implements LobbyConnection {
     @Override
     public Uni<Void> send(LobbyMessage.Server message) {
         return delegate.sendText(message);
+    }
+
+    @Override
+    public void close() {
+        delegate.closeAndAwait();
     }
 }

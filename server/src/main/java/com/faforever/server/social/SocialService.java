@@ -1,11 +1,17 @@
 package com.faforever.server.social;
 
+import com.faforever.server.connection.SessionController;
+import com.faforever.server.domain.AssignedAvatarEntity;
+import com.faforever.server.domain.AvatarEntity;
+import com.faforever.server.domain.FriendOrFoeEntity;
 import com.faforever.server.message.SocialMessage;
-import com.faforever.server.session.SessionController;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
-import org.jspecify.annotations.Nullable;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @JBossLog
 @RequiredArgsConstructor
@@ -14,13 +20,53 @@ public class SocialService {
 
     private final SessionController sessionController;
 
-    public void handleMessage(SocialMessage.Client message) {
-        switch (message) {
-            case SocialMessage.SocialAddRequest(@Nullable Integer friend, @Nullable Integer foe) -> {}
-            case SocialMessage.SocialRemoveRequest(@Nullable Integer friend, @Nullable Integer foe) -> {}
-            case SocialMessage.ListAvatarsRequest() -> {}
-            case SocialMessage.SelectAvatarRequest(@Nullable String avatar) -> {}
+    private final FriendOrFoeRepository friendOrFoeRepository;
+    private final AssignedAvatarRepository assignedAvatarRepository;
+
+    @Transactional
+    public void addSocialRelationship(SocialMessage.SocialAddRequest addRequest) {
+        Player player = sessionController.getPlayer();
+        Integer friend = addRequest.friendId();
+        if (friend != null) {
+            friendOrFoeRepository.upsertPlayerRelationship(player.getId(), friend, FriendOrFoeEntity.Status.FRIEND);
+            player.addFriend(friend);
         }
+
+        Integer foe = addRequest.foeId();
+        if (foe != null) {
+            friendOrFoeRepository.upsertPlayerRelationship(player.getId(), foe, FriendOrFoeEntity.Status.FOE);
+            player.addFoe(foe);
+        }
+    }
+
+    @Transactional
+    public void removeSocialRelationship(SocialMessage.SocialRemoveRequest removeRequest) {
+        Player player = sessionController.getPlayer();
+        Integer friend = removeRequest.friendId();
+        if (friend != null) {
+            friendOrFoeRepository.deletePlayerRelationship(player.getId(), friend);
+            player.removeFriend(friend);
+        }
+
+        Integer foe = removeRequest.foeId();
+        if (foe != null) {
+            friendOrFoeRepository.deletePlayerRelationship(player.getId(), foe);
+            player.removeFoe(foe);
+        }
+    }
+
+    @Transactional
+    public void sendAvatarList() {
+        Set<AvatarEntity> assignedAvatars = assignedAvatarRepository.findAssignedAvatarsByPlayer(sessionController.getPlayerId())
+                                                            .stream()
+                                                            .map(AssignedAvatarEntity::getAvatar)
+                                                            .collect(Collectors.toSet());
+        sessionController.sendAvatars(assignedAvatars);
+    }
+
+    @Transactional
+    public void selectAvatar(SocialMessage.SelectAvatarRequest selectRequest) {
+        assignedAvatarRepository.updateSelectedAvatar(sessionController.getPlayerId(), selectRequest.avatarUrl());
     }
 
 }

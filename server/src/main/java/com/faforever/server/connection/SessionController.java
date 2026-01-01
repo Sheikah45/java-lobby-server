@@ -1,20 +1,25 @@
-package com.faforever.server.session;
+package com.faforever.server.connection;
 
 import com.faforever.server.broadcast.BroadcastService;
-import com.faforever.server.connection.LobbyConnection;
-import com.faforever.server.connection.NoConnection;
+import com.faforever.server.domain.AvatarEntity;
+import com.faforever.server.endpoint.websocket.LobbyJsonWebsocketConnection;
 import com.faforever.server.message.ConnectionMessage;
 import com.faforever.server.message.LobbyMessage;
+import com.faforever.server.message.SocialMessage;
+import com.faforever.server.message.dto.DtoMapper;
 import com.faforever.server.social.Player;
-import com.faforever.server.websocket.LobbyJsonWebsocketConnection;
 import io.quarkus.websockets.next.WebSocketConnection;
 import jakarta.enterprise.context.SessionScoped;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 
 @JBossLog
 @SessionScoped
@@ -23,11 +28,19 @@ public class SessionController {
 
     private final BroadcastService broadcastService;
 
+    private final DtoMapper dtoMapper;
+
     private LobbyConnection connection = NoConnection.getInstance();
     private @Nullable UserAgent userAgent;
     private @Nullable Player player;
+    @Getter
+    private boolean authenticated;
 
     private final long sessionId = new Random().nextLong(Long.MAX_VALUE);
+
+    public void close() {
+        connection.close();
+    }
 
     public void setConnection(WebSocketConnection webSocketConnection) {
         if (!(connection instanceof NoConnection)) {
@@ -38,6 +51,9 @@ public class SessionController {
     }
 
     public void clearConnection() {
+        if (player != null) {
+            player.removeSession(this);
+        }
         broadcastService.unregisterSession(this);
         connection = NoConnection.getInstance();
     }
@@ -56,7 +72,26 @@ public class SessionController {
         }
 
         this.player = player;
-        connection.sendAndAwait(new ConnectionMessage.LoginSuccessResponse(player.asPlayerInfo()));
+        player.addSession(this);
+        connection.sendAndAwait(new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player)));
+
+        Set<String> channels = new HashSet<>();
+        if (player.getClan() != null) {
+            channels.add("#%s_clan".formatted(player.getClan()));
+        }
+        connection.sendAndAwait(new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds()));
+        authenticated = true;
+    }
+
+    public int getPlayerId() {
+        return getPlayer().getId();
+    }
+
+    public Player getPlayer() {
+        if (player == null) {
+            throw new IllegalStateException("Player is not set for session");
+        }
+        return player;
     }
 
     public void sendSessionInfo() {
@@ -73,6 +108,10 @@ public class SessionController {
 
     public boolean isActive() {
         return !(connection instanceof NoConnection);
+    }
+
+    public void sendAvatars(Collection<AvatarEntity> avatars) {
+        connection.sendAndAwait(new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars)));
     }
 
 }

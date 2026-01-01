@@ -1,14 +1,13 @@
 package com.faforever.server.connection;
 
 import com.faforever.server.message.ConnectionMessage;
-import com.faforever.server.session.SessionController;
-import com.faforever.server.session.UserAgent;
 import com.faforever.server.social.PlayerService;
-import io.vertx.core.json.JsonObject;
-import io.vertx.ext.auth.impl.jose.JWT;
+import io.smallrye.jwt.auth.principal.JWTParser;
+import io.smallrye.jwt.auth.principal.ParseException;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 @JBossLog
 @RequiredArgsConstructor
@@ -19,20 +18,27 @@ public class ConnectionService {
 
     private final SessionController sessionController;
 
-    public void handleMessage(ConnectionMessage.Client message) {
-        switch (message) {
-            case ConnectionMessage.Ping() -> sessionController.pong();
-            case ConnectionMessage.Pong() -> {}
-            case ConnectionMessage.SessionRequest(String userAgent, String version) -> {
-                sessionController.setUserAgent(new UserAgent(userAgent, version));
-                sessionController.sendSessionInfo();
-            }
-            case ConnectionMessage.AuthenticateRequest(String token, String uniqueId) -> {
-                JsonObject tokenObject = JWT.parse(token);
-                int playerId = Integer.parseInt(tokenObject.getJsonObject("payload").getString("sub"));
-                playerService.initializeSessionPlayer(playerId);
-            }
+    private final JWTParser jwtParser;
+
+    public void authenticate(ConnectionMessage.AuthenticateRequest authenticateRequest) {
+        String token = authenticateRequest.token();
+        JsonWebToken jwt;
+        try {
+            jwt = jwtParser.parse(token);
+        } catch (ParseException e) {
+            throw new RuntimeException(e);
         }
+        int playerId = Integer.parseInt(jwt.getSubject());
+        playerService.initializeSessionPlayer(playerId);
+    }
+
+    public void updateSession(ConnectionMessage.SessionRequest sessionRequest) {
+        sessionController.setUserAgent(new UserAgent(sessionRequest.userAgent(), sessionRequest.version()));
+        sessionController.sendSessionInfo();
+    }
+
+    public void pong() {
+        sessionController.pong();
     }
 
 }

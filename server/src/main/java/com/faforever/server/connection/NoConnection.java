@@ -18,4 +18,7 @@ public class NoConnection implements LobbyConnection {
     public Uni<Void> send(LobbyMessage.Server message) {
         throw new IllegalStateException("No connection exists");
     }
+
+    @Override
+    public void close() {}
 }

@@ -1,8 +1,8 @@
-package com.faforever.server.websocket;
+package com.faforever.server.endpoint.websocket;
 
 import com.faforever.server.message.LobbyMessage;
 import com.faforever.server.message.MessageBroker;
-import com.faforever.server.session.SessionController;
+import com.faforever.server.connection.SessionController;
 import io.quarkus.websockets.next.OnClose;
 import io.quarkus.websockets.next.OnError;
 import io.quarkus.websockets.next.OnOpen;
@@ -17,7 +17,7 @@ import lombok.extern.jbosslog.JBossLog;
 
 @JBossLog
 @RequiredArgsConstructor
-@WebSocket(path = "/v1/json")
+@WebSocket(path = "/")
 @ApplicationScoped
 @RunOnVirtualThread
 public class LobbyWebSocket {

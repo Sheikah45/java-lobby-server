@@ -1,0 +1,26 @@
+package com.faforever.server.social;
+
+import com.faforever.server.domain.FriendOrFoeEntity;
+import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+class FriendOrFoeRepository implements PanacheRepositoryBase<FriendOrFoeEntity, FriendOrFoeEntity.Id> {
+
+    void upsertPlayerRelationship(int playerId, int subjectId, FriendOrFoeEntity.Status status) {
+        FriendOrFoeEntity.Id id = new FriendOrFoeEntity.Id(playerId, subjectId);
+        FriendOrFoeEntity friendOrFoe = findByIdOptional(id).orElseGet(() -> {
+            FriendOrFoeEntity newFriendOrFoe = new FriendOrFoeEntity();
+            newFriendOrFoe.setId(id);
+            return newFriendOrFoe;
+        });
+        friendOrFoe.setStatus(status);
+        persist(friendOrFoe);
+    }
+
+    void deletePlayerRelationship(int playerId, int subjectId) {
+        FriendOrFoeEntity.Id id = new FriendOrFoeEntity.Id(playerId, subjectId);
+        deleteById(id);
+    }
+
+}

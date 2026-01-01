@@ -1,4 +1,4 @@
-package com.faforever.server.session;
+package com.faforever.server.connection;
 
 import org.jspecify.annotations.Nullable;
 

@@ -12,6 +12,7 @@ public interface LobbyConnection {
 
     Uni<Void> send(LobbyMessage.Server message);
 
+    void close();
 
 
 }
