@@ -1,7 +1,7 @@
 package com.faforever.server.connection;
 
 import com.faforever.server.message.ConnectionMessage;
-import com.faforever.server.social.PlayerService;
+import com.faforever.server.player.PlayerService;
 import io.smallrye.jwt.auth.principal.JWTParser;
 import io.smallrye.jwt.auth.principal.ParseException;
 import jakarta.enterprise.context.ApplicationScoped;

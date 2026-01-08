@@ -25,7 +25,7 @@ public sealed interface GameMessage {
             @JsonProperty("uid") int gameId,
             String name,
             @JsonProperty("mod") String featuredMod,
-            LobbyMode lobbyMode,
+            @JsonProperty("init_mode") LobbyMode lobbyMode,
             GameType gameType,
             @JsonProperty("rating_type") String leaderboard,
             @JsonProperty("mapname") String mapName,
@@ -34,12 +34,19 @@ public sealed interface GameMessage {
             Map<String, String> gameOptions,
             @Nullable Integer team,
             @Nullable Faction faction
-    ) implements Server {}
+    ) implements Server {
+
+        @JsonProperty("args")
+        public List<String> args() {
+            return List.of();
+        }
+
+    }
 
     record HostGameRequest(
-            @JsonProperty("mapname") String mapName,
+            @JsonProperty("mapname") @Nullable String mapName,
             String title,
-            @JsonProperty("mod") String featuredMod,
+            @JsonProperty("mod") @Nullable String featuredMod,
             GameAccess access,
             String password,
             GameVisibility visibility,

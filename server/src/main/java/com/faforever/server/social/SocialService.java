@@ -2,9 +2,9 @@ package com.faforever.server.social;
 
 import com.faforever.server.connection.SessionController;
 import com.faforever.server.domain.AssignedAvatarEntity;
-import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.domain.FriendOrFoeEntity;
 import com.faforever.server.message.SocialMessage;
+import com.faforever.server.player.Player;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -57,16 +57,19 @@ public class SocialService {
 
     @Transactional
     public void sendAvatarList() {
-        Set<AvatarEntity> assignedAvatars = assignedAvatarRepository.findAssignedAvatarsByPlayer(sessionController.getPlayerId())
-                                                            .stream()
-                                                            .map(AssignedAvatarEntity::getAvatar)
-                                                            .collect(Collectors.toSet());
+        Set<Avatar> assignedAvatars = assignedAvatarRepository.findAssignedAvatarsByPlayer(
+                                                                      sessionController.getPlayer())
+                                                              .stream()
+                                                              .map(AssignedAvatarEntity::getAvatar)
+                                                              .map(avatarEntity -> new Avatar(avatarEntity.getUrl(),
+                                                                      avatarEntity.getDescription()))
+                                                              .collect(Collectors.toSet());
         sessionController.sendAvatars(assignedAvatars);
     }
 
     @Transactional
     public void selectAvatar(SocialMessage.SelectAvatarRequest selectRequest) {
-        assignedAvatarRepository.updateSelectedAvatar(sessionController.getPlayerId(), selectRequest.avatarUrl());
+        assignedAvatarRepository.updateSelectedAvatar(sessionController.getPlayer(), selectRequest.avatarUrl());
     }
 
 }

@@ -6,13 +6,8 @@ import io.smallrye.mutiny.Uni;
 
 public interface LobbyConnection {
 
-    default void sendAndAwait(LobbyMessage.Server message) {
-        send(message).await().indefinitely();
-    }
-
-    Uni<Void> send(LobbyMessage.Server message);
+    void sendAndAwait(LobbyMessage.Server message);
 
     void close();
-
 
 }

@@ -3,7 +3,7 @@ package com.faforever.server.message;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
-public sealed interface LobbyMessage {
+public sealed interface LobbyMessage permits GPGMessage, LobbyMessage.Client, LobbyMessage.Server {
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
     @JsonSubTypes(
@@ -29,9 +29,9 @@ public sealed interface LobbyMessage {
                     @JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = "notice")
             }
     )
-    sealed interface Server extends LobbyMessage permits AdminMessage.Server, ConnectionMessage.Server, GameMessage.Server, Broadcast, MatchmakerMessage.Server, SocialMessage.Server {}
+    sealed interface Server extends LobbyMessage permits AdminMessage.Server, ConnectionMessage.Server, GPGMessage.Server, GameMessage.Server, Broadcast, MatchmakerMessage.Server, SocialMessage.Server {}
 
-    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command", defaultImpl = GPGMessage.Client.class, visible = true)
     @JsonSubTypes(
             {
                     @JsonSubTypes.Type(value = ConnectionMessage.Ping.class, name = "ping"),
@@ -57,7 +57,7 @@ public sealed interface LobbyMessage {
                     @JsonSubTypes.Type(value = GameMessage.RestoreGameSessionRequest.class, name = "restore_game_session"),
             }
     )
-    sealed interface Client extends LobbyMessage permits AdminMessage.Client, ConnectionMessage.Client, GameMessage.Client, MatchmakerMessage.Client, SocialMessage.Client {}
+    sealed interface Client extends LobbyMessage permits AdminMessage.Client, ConnectionMessage.Client, GPGMessage.Client, GameMessage.Client, MatchmakerMessage.Client, SocialMessage.Client {}
 
     sealed interface Broadcast extends Server permits AdminMessage.NoticeInfo, ConnectionMessage.Ping, GameMessage.GameInfoList, MatchmakerMessage.MatchmakerInfo, SocialMessage.PlayerInfoList {}
 

@@ -3,6 +3,7 @@ package com.faforever.server.message;
 import com.faforever.server.admin.AdminService;
 import com.faforever.server.broadcast.BroadcastService;
 import com.faforever.server.connection.ConnectionService;
+import com.faforever.server.game.GPGService;
 import com.faforever.server.game.GameService;
 import com.faforever.server.matchmaker.MatchmakerService;
 import com.faforever.server.social.SocialService;
@@ -20,6 +21,7 @@ public class MessageBroker {
     private final AdminService adminService;
     private final MatchmakerService matchmakerService;
     private final GameService gameService;
+    private final GPGService gpgService;
     private final BroadcastService broadcastService;
 
     public void handleMessage(LobbyMessage.Client message) {
@@ -47,9 +49,12 @@ public class MessageBroker {
             case MatchmakerMessage.SelectPartyFactionsRequest selectPartyFactionsRequest -> {}
             case MatchmakerMessage.SetPlayerVetoesRequest setPlayerVetoesRequest -> {}
             case MatchmakerMessage.UnreadyPartyRequest _ -> {}
-            case GameMessage.HostGameRequest hostGameRequest -> {}
+            case GameMessage.HostGameRequest hostGameRequest -> gameService.handleHostRequest(hostGameRequest);
             case GameMessage.JoinGameRequest joinGameRequest -> {}
             case GameMessage.RestoreGameSessionRequest restoreGameSessionRequest -> {}
+            case GPGMessage.AIOption aiOptionMessage -> gpgService.updateAiOption(aiOptionMessage);
+            case GPGMessage.GameState gameStateMessage -> gpgService.updateGameState(gameStateMessage);
+            case GPGMessage.Client _ -> {}
         }
     }
 

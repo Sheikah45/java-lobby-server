@@ -12,8 +12,8 @@ public class LobbyJsonWebsocketConnection implements LobbyConnection {
     private final WebSocketConnection delegate;
 
     @Override
-    public Uni<Void> send(LobbyMessage.Server message) {
-        return delegate.sendText(message);
+    public void sendAndAwait(LobbyMessage.Server message) {
+        delegate.sendTextAndAwait(message);
     }
 
     @Override

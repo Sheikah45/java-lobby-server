@@ -1,4 +1,4 @@
-package com.faforever.server.social;
+package com.faforever.server.player;
 
 import com.faforever.server.config.DefaultMapperConfig;
 import com.faforever.server.domain.FriendOrFoeEntity;
@@ -17,6 +17,7 @@ abstract class PlayerMapper {
     @Mapping(target = "avatar", source = "selectedAvatar")
     @Mapping(target = "foeIds", ignore = true)
     @Mapping(target = "friendIds", ignore = true)
+    @Mapping(target = "game", ignore = true)
     @Mapping(target = "clan", source = "clan.tag")
     @Mapping(target = "id", source = "id")
     abstract Player map(PlayerEntity player);

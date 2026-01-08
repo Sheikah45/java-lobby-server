@@ -1,13 +1,16 @@
 package com.faforever.server.connection;
 
 import com.faforever.server.broadcast.BroadcastService;
-import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.endpoint.websocket.LobbyJsonWebsocketConnection;
+import com.faforever.server.game.Game;
 import com.faforever.server.message.ConnectionMessage;
+import com.faforever.server.message.GPGMessage;
+import com.faforever.server.message.GameMessage;
 import com.faforever.server.message.LobbyMessage;
 import com.faforever.server.message.SocialMessage;
 import com.faforever.server.message.dto.DtoMapper;
-import com.faforever.server.social.Player;
+import com.faforever.server.player.Player;
+import com.faforever.server.social.Avatar;
 import io.quarkus.websockets.next.WebSocketConnection;
 import jakarta.enterprise.context.SessionScoped;
 import lombok.Getter;
@@ -17,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
@@ -33,6 +37,7 @@ public class SessionController {
     private LobbyConnection connection = NoConnection.getInstance();
     private @Nullable UserAgent userAgent;
     private @Nullable Player player;
+    private @Nullable Game game;
     @Getter
     private boolean authenticated;
 
@@ -76,15 +81,9 @@ public class SessionController {
         connection.sendAndAwait(new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player)));
 
         Set<String> channels = new HashSet<>();
-        if (player.getClan() != null) {
-            channels.add("#%s_clan".formatted(player.getClan()));
-        }
+        player.getClan().map("#%s_clan"::formatted).ifPresent(channels::add);
         connection.sendAndAwait(new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds()));
         authenticated = true;
-    }
-
-    public int getPlayerId() {
-        return getPlayer().getId();
     }
 
     public Player getPlayer() {
@@ -92,6 +91,22 @@ public class SessionController {
             throw new IllegalStateException("Player is not set for session");
         }
         return player;
+    }
+
+    public void setGame(Game game) {
+        if (this.game != null && !Objects.equals(this.game, game)) {
+            throw new IllegalStateException("Game already set for the session");
+        }
+
+        this.game = game;
+        game.addGameConnection(this);
+    }
+
+    public Game getGame() {
+        if (game == null) {
+            throw new IllegalStateException("Game is not set for session");
+        }
+        return game;
     }
 
     public void sendSessionInfo() {
@@ -110,8 +125,17 @@ public class SessionController {
         return !(connection instanceof NoConnection);
     }
 
-    public void sendAvatars(Collection<AvatarEntity> avatars) {
+    public void sendAvatars(Collection<Avatar> avatars) {
         connection.sendAndAwait(new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars)));
+    }
+
+    public void launchGame(Game game) {
+        GameMessage.GameLaunchResponse gameLaunchResponse = dtoMapper.map(game);
+        connection.sendAndAwait(gameLaunchResponse);
+    }
+
+    public void sendGpgHostGame() {
+        connection.sendAndAwait(new GPGMessage.HostGame(List.of(getGame().getMapName())));
     }
 
 }

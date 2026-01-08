@@ -2,9 +2,12 @@ package com.faforever.server.message.dto;
 
 import com.faforever.server.config.DefaultMapperConfig;
 import com.faforever.server.domain.AvatarEntity;
+import com.faforever.server.game.Game;
+import com.faforever.server.message.GameMessage;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
-import com.faforever.server.social.Player;
+import com.faforever.server.player.Player;
+import com.faforever.server.social.Avatar;
 import com.faforever.server.social.State;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -41,6 +44,24 @@ public abstract class DtoMapper {
 
     public abstract AvatarInfo map(AvatarEntity avatar);
 
-    public abstract List<AvatarInfo> mapAvatars(Collection<AvatarEntity> avatars);
+    public abstract List<AvatarInfo> mapAvatars(Collection<Avatar> avatars);
 
+    @Mapping(target = "team", ignore = true)
+    @Mapping(target = "name", source = "title")
+    @Mapping(target = "mapPosition", ignore = true)
+    @Mapping(target = "mapName", ignore = true)
+    @Mapping(target = "lobbyMode", source = "gameType")
+    @Mapping(target = "leaderboard", source = "ratingType")
+    @Mapping(target = "gameOptions", ignore = true)
+    @Mapping(target = "gameId", source = "id")
+    @Mapping(target = "faction", ignore = true)
+    @Mapping(target = "expectedPlayers", ignore = true)
+    public abstract GameMessage.GameLaunchResponse map(Game game);
+
+    LobbyMode map(GameType gameType) {
+        return switch (gameType) {
+            case COOP, CUSTOM, TUTORIAL -> LobbyMode.DEFAULT_LOBBY;
+            case MATCHMAKER, TOURNAMENT -> LobbyMode.AUTO_LOBBY;
+        };
+    }
 }

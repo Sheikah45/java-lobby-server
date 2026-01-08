@@ -3,8 +3,9 @@ package com.faforever.server.admin;
 import com.faforever.server.broadcast.BroadcastService;
 import com.faforever.server.connection.SessionController;
 import com.faforever.server.message.AdminMessage;
-import com.faforever.server.social.PlayerRepository;
-import com.faforever.server.social.PlayerService;
+import com.faforever.server.player.Player;
+import com.faforever.server.player.PlayerRepository;
+import com.faforever.server.player.PlayerService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -25,8 +26,8 @@ public class AdminService {
     @Transactional
     public void broadcast(AdminMessage.BroadcastRequest broadcastRequest) {
         String message = broadcastRequest.message();
-        int playerId = sessionController.getPlayerId();
-        if (message.isBlank() || playerRepository.playerHasPermission(playerId, "ADMIN_BROADCAST_MESSAGE")) {
+        Player player = sessionController.getPlayer();
+        if (message.isBlank() || playerRepository.playerHasPermission(player, "ADMIN_BROADCAST_MESSAGE")) {
             return;
         }
 
@@ -35,8 +36,8 @@ public class AdminService {
 
     @Transactional
     public void kickPlayer(AdminMessage.ClosePlayerLobbyRequest closePlayerLobbyRequest) {
-        int playerId = sessionController.getPlayerId();
-        if (playerRepository.playerHasPermission(playerId, "ADMIN_KICK_SERVER")) {
+        Player player = sessionController.getPlayer();
+        if (playerRepository.playerHasPermission(player, "ADMIN_KICK_SERVER")) {
             return;
         }
 

@@ -1,4 +1,4 @@
-package com.faforever.server.social;
+package com.faforever.server.player;
 
 import com.faforever.server.broadcast.BroadcastService;
 import com.faforever.server.connection.SessionController;
@@ -67,7 +67,6 @@ public class PlayerService {
 
         Set<PlayerInfo> playerInfos = dtoMapper.map(frozenDirtyPlayers);
         broadcastService.broadcast(new SocialMessage.PlayerInfoList(playerInfos));
-
 
         dirtyPlayers.removeAll(frozenDirtyPlayers);
     }

@@ -1,5 +1,6 @@
 package com.faforever.server.config;
 
+import com.faforever.server.mapstruct.OptionalMapper;
 import org.mapstruct.CollectionMappingStrategy;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.MapperConfig;
@@ -12,5 +13,6 @@ import org.mapstruct.ReportingPolicy;
         collectionMappingStrategy = CollectionMappingStrategy.TARGET_IMMUTABLE,
         typeConversionPolicy = ReportingPolicy.ERROR, injectionStrategy = InjectionStrategy.CONSTRUCTOR,
         nullValueIterableMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT,
-        nullValueMapMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT)
+        nullValueMapMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT,
+        uses = OptionalMapper.class)
 public interface DefaultMapperConfig {}
