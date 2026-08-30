@@ -3,6 +3,8 @@ package com.faforever.server.message;
 import com.faforever.server.message.dto.PlayerInfo;
 import org.jspecify.annotations.Nullable;
 
+import java.time.OffsetDateTime;
+
 public sealed interface ConnectionMessage {
 
     sealed interface Server extends ConnectionMessage, LobbyMessage.Server {}
@@ -28,7 +30,8 @@ public sealed interface ConnectionMessage {
     ) implements Server {}
 
     record LoginSuccessResponse(
-            PlayerInfo me
+            PlayerInfo me,
+            OffsetDateTime currentTime
     ) implements Server {}
 
     record LoginFailureResponse(

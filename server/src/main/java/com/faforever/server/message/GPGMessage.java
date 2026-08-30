@@ -1,7 +1,6 @@
 package com.faforever.server.message;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonTypeId;
 
 import java.util.List;
 
@@ -10,6 +9,8 @@ public sealed interface GPGMessage extends LobbyMessage {
     sealed interface Server extends GPGMessage, LobbyMessage.Server {}
 
     sealed interface Client extends GPGMessage, LobbyMessage.Client {
+
+        sealed interface HostOnly extends GPGMessage.Client {}
 
         @JsonCreator
         static GPGMessage.Client of(String command, String target, List<Object> args) {
@@ -49,17 +50,10 @@ public sealed interface GPGMessage extends LobbyMessage {
     default String target() {
         return "game";
     }
-
-    @JsonTypeId
-    String command();
     
     record AIOption(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "AIOption";
-        }
+    ) implements Client.HostOnly {
 
         public String aiName() {
             return (String) args.getFirst();
@@ -77,118 +71,66 @@ public sealed interface GPGMessage extends LobbyMessage {
     record Bottleneck(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "Bottleneck";
-        }
     }
 
     record BottleneckCleared(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "BottleneckCleared";
-        }
     }
 
     record Chat(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "Chat";
-        }
     }
 
     record ClearSlot(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "ClearSlot";
-        }
+    ) implements Client.HostOnly {
     }
 
     record Desync(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "Desync";
-        }
     }
 
     record Disconnected(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "Disconnected";
-        }
     }
 
     record EnforceRating(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "EnforceRating";
-        }
+    ) implements GPGMessage.Client.HostOnly {
     }
 
     record GameEnded(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameEnded";
-        }
     }
 
     record GameFull(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameFull";
-        }
     }
 
     record GameMods(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameMods";
-        }
+    ) implements GPGMessage.Client.HostOnly {
     }
 
     record GameOption(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameOption";
-        }
+    ) implements GPGMessage.Client.HostOnly {
     }
 
     record GameResult(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameResult";
-        }
     }
 
     record GameState(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "GameState";
-        }
 
         public String state() {
             return (String) args.getFirst();
@@ -198,73 +140,41 @@ public sealed interface GPGMessage extends LobbyMessage {
     record IceMsg(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "IceMsg";
-        }
     }
 
     record JsonStats(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "JsonStats";
-        }
     }
 
     record LaunchStatus(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "LaunchStatus";
-        }
     }
 
     record OperationComplete(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "OperationComplete";
-        }
     }
 
     record PlayerOption(
             List<Object> args
-    ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "PlayerOption";
-        }
+    ) implements GPGMessage.Client.HostOnly {
     }
 
     record Rehost(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "Rehost";
-        }
     }
 
     record TeamkillHappened(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "TeamkillHappened";
-        }
     }
 
     record TeamkillReport(
             List<Object> args
     ) implements GPGMessage.Client {
-        @Override
-        public String command() {
-            return "TeamkillReport";
-        }
     }
 
     record UnknownMessage(
@@ -274,13 +184,6 @@ public sealed interface GPGMessage extends LobbyMessage {
     
     record HostGame(
             List<Object> args
-    ) implements GPGMessage.Server {
-
-        @Override
-        public String command() {
-            return "HostGame";
-        }
-
-    }
+    ) implements GPGMessage.Server {}
 
 }

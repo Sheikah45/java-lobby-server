@@ -22,7 +22,7 @@ public sealed interface AdminMessage {
         return switch (action) {
             case BROADCAST -> new BroadcastRequest(properties.get("message"));
             case CLOSE_GAME -> new ClosePlayerGameRequest(Integer.parseInt(properties.get("user_id")));
-            case CLOSE_LOBBY -> new ClosePlayerLobbyRequest(Integer.parseInt(properties.get("user_id")));
+            case CLOSE_LOBBY -> new KickPlayerRequest(Integer.parseInt(properties.get("user_id")));
         };
     }
 
@@ -32,7 +32,7 @@ public sealed interface AdminMessage {
             int playerId
     ) implements Client {}
 
-    record ClosePlayerLobbyRequest(
+    record KickPlayerRequest(
             int playerId
     ) implements Client {}
 
@@ -44,7 +44,8 @@ public sealed interface AdminMessage {
     enum Style {
         @JsonProperty("info") INFO,
         @JsonProperty("error") ERROR,
-        @JsonProperty("kick") KICK
+        @JsonProperty("kick") KICK,
+        @JsonProperty("kill") KILL
     }
 
 }

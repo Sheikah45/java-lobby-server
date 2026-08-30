@@ -1,6 +1,8 @@
 quarkus:
   log:
     level: INFO
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s %X%e%n"
   devservices:
     enabled: false
   application:
@@ -15,12 +17,29 @@ quarkus:
       url: ${DB_URL:jdbc:mariadb://localhost:3306/faf_lobby?ssl=false}
   http:
     port: 8003
+    host-validation:
+      allowed-hosts: ${ALLOWED_HOST:ws.faforever.localhost}
+
+"%test":
+  quarkus:
+    log:
+      console:
+        json:
+          enabled: false
+      category:
+        "com.faforever":
+          level: DEBUG
+        "io.quarkus.websockets.next.traffic":
+          level: DEBUG
 
 "%dev":
   quarkus:
     live-reload:
       instrumentation: true
     log:
+      console:
+        json:
+          enabled: false
       category:
         "com.faforever":
           level: DEBUG

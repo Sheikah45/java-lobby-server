@@ -4,9 +4,9 @@ import com.faforever.server.config.DefaultMapperConfig;
 import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.game.Game;
 import com.faforever.server.message.GameMessage;
+import com.faforever.server.player.Player;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
-import com.faforever.server.player.Player;
 import com.faforever.server.social.Avatar;
 import com.faforever.server.social.State;
 import org.mapstruct.Mapper;
@@ -21,9 +21,10 @@ public abstract class DtoMapper {
 
     public abstract Set<PlayerInfo> map(Collection<Player> players);
 
+    @Mapping(target = ".", source = "details")
     @Mapping(target = "state", source = "state")
     @Mapping(target = "ratings", source = "leaderboardRatings")
-    @Mapping(target = "login", source = "username")
+    @Mapping(target = "login", source = "details.username")
     public abstract PlayerInfo map(Player player);
 
     public PlayerInfo.State map(State state) {
@@ -44,19 +45,38 @@ public abstract class DtoMapper {
 
     public abstract AvatarInfo map(AvatarEntity avatar);
 
+    public abstract AvatarInfo map(Avatar avatar);
+
     public abstract List<AvatarInfo> mapAvatars(Collection<Avatar> avatars);
 
+    @Mapping(target = ".", source = "details" )
+    @Mapping(target = "uid", source = "details.id")
+    @Mapping(target = "host", source = "details.host.details.username")
+    @Mapping(target = "state", ignore = true)
+    @Mapping(target = "simMods", ignore = true)
+    @Mapping(target = "passwordProtected", ignore = true)
+    @Mapping(target = "numberOfPlayers", ignore = true)
+    @Mapping(target = "maxPlayers", ignore = true)
+    @Mapping(target = "mapFilePath", ignore = true)
+    @Mapping(target = "leaderboard", ignore = true)
+    @Mapping(target = "launchedAt", ignore = true)
+    @Mapping(target = "hostedAt", ignore = true)
+    public abstract GameInfo map(Game game);
+
+    public abstract List<GameInfo> mapGames(Collection<Game> games);
+
+    @Mapping(target = ".", source = "details" )
     @Mapping(target = "team", ignore = true)
-    @Mapping(target = "name", source = "title")
+    @Mapping(target = "name", source = "details.title")
     @Mapping(target = "mapPosition", ignore = true)
     @Mapping(target = "mapName", ignore = true)
-    @Mapping(target = "lobbyMode", source = "gameType")
-    @Mapping(target = "leaderboard", source = "ratingType")
+    @Mapping(target = "lobbyMode", source = "details.gameType")
+    @Mapping(target = "leaderboard", source = "details.ratingType")
     @Mapping(target = "gameOptions", ignore = true)
-    @Mapping(target = "gameId", source = "id")
+    @Mapping(target = "gameId", source = "details.id")
     @Mapping(target = "faction", ignore = true)
     @Mapping(target = "expectedPlayers", ignore = true)
-    public abstract GameMessage.GameLaunchResponse map(Game game);
+    public abstract GameMessage.GameLaunchResponse mapToGameLaunch(Game game);
 
     LobbyMode map(GameType gameType) {
         return switch (gameType) {

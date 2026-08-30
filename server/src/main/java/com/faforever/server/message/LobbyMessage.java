@@ -26,7 +26,9 @@ public sealed interface LobbyMessage permits GPGMessage, LobbyMessage.Client, Lo
                     @JsonSubTypes.Type(value = MatchmakerMessage.MatchmakerInfo.class, name = "matchmaker_info"),
                     @JsonSubTypes.Type(value = GameMessage.GameInfoList.class, name = "game_info"),
                     @JsonSubTypes.Type(value = GameMessage.GameLaunchResponse.class, name = "game_launch"),
-                    @JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = "notice")
+                    @JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = "notice"),
+                    @JsonSubTypes.Type(value = GPGMessage.HostGame.class, name = "HostGame")
+
             }
     )
     sealed interface Server extends LobbyMessage permits AdminMessage.Server, ConnectionMessage.Server, GPGMessage.Server, GameMessage.Server, Broadcast, MatchmakerMessage.Server, SocialMessage.Server {}

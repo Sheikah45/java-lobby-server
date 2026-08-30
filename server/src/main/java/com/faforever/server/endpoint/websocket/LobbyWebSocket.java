@@ -1,8 +1,7 @@
 package com.faforever.server.endpoint.websocket;
 
-import com.faforever.server.message.LobbyMessage;
-import com.faforever.server.message.MessageBroker;
 import com.faforever.server.connection.SessionController;
+import com.faforever.server.message.LobbyMessage;
 import io.quarkus.websockets.next.OnClose;
 import io.quarkus.websockets.next.OnError;
 import io.quarkus.websockets.next.OnOpen;
@@ -11,23 +10,22 @@ import io.quarkus.websockets.next.TextDecodeException;
 import io.quarkus.websockets.next.WebSocket;
 import io.quarkus.websockets.next.WebSocketConnection;
 import io.smallrye.common.annotation.RunOnVirtualThread;
-import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.SessionScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 
 @JBossLog
 @RequiredArgsConstructor
 @WebSocket(path = "/")
-@ApplicationScoped
+@SessionScoped
 @RunOnVirtualThread
 public class LobbyWebSocket {
 
     private final SessionController sessionController;
-    private final MessageBroker messageBroker;
 
     @OnOpen
     public void onOpen(WebSocketConnection connection) {
-        sessionController.setConnection(connection);
+        sessionController.setConnection(new LobbyJsonWebsocketConnection(connection));
     }
 
     @OnClose
@@ -37,7 +35,7 @@ public class LobbyWebSocket {
 
     @OnTextMessage
     public void onTextMessage(LobbyMessage.Client message) {
-        messageBroker.handleMessage(message);
+        sessionController.handleMessage(message);
     }
 
     @OnError

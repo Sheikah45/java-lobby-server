@@ -15,20 +15,17 @@ import java.util.concurrent.ExecutorService;
 public class BroadcastService {
 
     private final ExecutorService executorService;
+    private final Set<SessionController> sessionControllers = ConcurrentHashMap.newKeySet();
 
     public BroadcastService(@VirtualThreads ExecutorService executorService) {
         this.executorService = executorService;
     }
 
-    private final Set<SessionController> sessionControllers = ConcurrentHashMap.newKeySet();
-
     public void broadcast(LobbyMessage.Broadcast message) {
-        for (SessionController sessionController : sessionControllers) {
-            if (!sessionController.isActive() || !sessionController.isAuthenticated()) {
-                continue;
-            }
-            executorService.execute(() -> sessionController.broadcast(message));
-        }
+        sessionControllers.stream()
+                          .filter(SessionController::isActive)
+                          .filter(SessionController::isAuthenticated)
+                          .forEach(sessionController -> executorService.execute(() -> sessionController.broadcast(message)));
     }
 
     public void registerSession(SessionController sessionController) {

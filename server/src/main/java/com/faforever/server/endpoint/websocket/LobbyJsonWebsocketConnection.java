@@ -3,7 +3,6 @@ package com.faforever.server.endpoint.websocket;
 import com.faforever.server.connection.LobbyConnection;
 import com.faforever.server.message.LobbyMessage;
 import io.quarkus.websockets.next.WebSocketConnection;
-import io.smallrye.mutiny.Uni;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor

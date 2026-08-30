@@ -48,8 +48,5 @@ public class PlayerEntity extends AbstractEntity {
     private Set<UserGroupEntity> userGroups;
 
     @OneToMany(mappedBy = "player")
-    private Set<FriendOrFoeEntity> friendsAndFoes;
-
-    @OneToMany(mappedBy = "player")
     private Set<LeaderboardRatingEntity> leaderboardRatings;
 }

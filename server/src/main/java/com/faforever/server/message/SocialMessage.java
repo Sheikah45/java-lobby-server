@@ -2,7 +2,9 @@ package com.faforever.server.message;
 
 import com.faforever.server.message.dto.AvatarInfo;
 import com.faforever.server.message.dto.PlayerInfo;
-import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;

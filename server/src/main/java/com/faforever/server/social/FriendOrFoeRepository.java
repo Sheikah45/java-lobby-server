@@ -5,7 +5,7 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
-class FriendOrFoeRepository implements PanacheRepositoryBase<FriendOrFoeEntity, FriendOrFoeEntity.Id> {
+public class FriendOrFoeRepository implements PanacheRepositoryBase<FriendOrFoeEntity, FriendOrFoeEntity.Id> {
 
     void upsertPlayerRelationship(int playerId, int subjectId, FriendOrFoeEntity.Status status) {
         FriendOrFoeEntity.Id id = new FriendOrFoeEntity.Id(playerId, subjectId);
