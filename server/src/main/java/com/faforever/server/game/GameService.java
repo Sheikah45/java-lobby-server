@@ -7,6 +7,7 @@ import com.faforever.server.message.dto.DtoMapper;
 import com.faforever.server.message.dto.GameType;
 import com.faforever.server.message.dto.GameVisibility;
 import com.faforever.server.player.Player;
+import com.faforever.server.player.PlayerService;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.annotation.PostConstruct;
@@ -27,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class GameService {
 
     private final BroadcastService broadcastService;
+    private final PlayerService playerService;
 
     private final GameRepository gameRepository;
 
@@ -53,7 +55,9 @@ public class GameService {
         return game;
     }
 
-    public Game createNewGame(Player host, GameMessage.HostGameRequest hostMessage) {
+    public Game createNewGame(int hostId, GameMessage.HostGameRequest hostMessage) {
+        Player host = playerService.getOnlinePlayer(hostId);
+
         String title = hostMessage.title();
         if (title.isBlank()) {
             throw new ClientException("Title must not be empty");

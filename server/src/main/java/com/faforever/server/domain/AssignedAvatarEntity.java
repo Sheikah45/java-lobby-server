@@ -16,9 +16,8 @@ import java.time.OffsetDateTime;
 @Table(name = "avatars")
 public class  AssignedAvatarEntity extends AbstractEntity {
 
-    @ManyToOne
-    @JoinColumn(name = "idUser")
-    private PlayerEntity player;
+    @Column(name = "idUser")
+    private int playerId;
 
     @ManyToOne
     @JoinColumn(name = "idAvatar")

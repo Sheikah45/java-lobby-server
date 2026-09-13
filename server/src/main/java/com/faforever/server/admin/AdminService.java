@@ -32,7 +32,7 @@ public class AdminService {
             return;
         }
 
-        if (!playerRepository.playerHasPermission(broadcastRequest.requestorId(), "ADMIN_BROADCAST_MESSAGE")) {
+        if (playerRepository.playerLacksPermission(broadcastRequest.requestorId(), "ADMIN_BROADCAST_MESSAGE")) {
             LOG.warnf("Unauthorized broadcast request: %s", broadcastRequest.message());
             return;
         }
@@ -41,7 +41,7 @@ public class AdminService {
     }
 
     private void kickPlayer(AdminRequest.KickPlayer kickPlayerRequest) {
-        if (!playerRepository.playerHasPermission(kickPlayerRequest.requestorId(), "ADMIN_KICK_SERVER")) {
+        if (playerRepository.playerLacksPermission(kickPlayerRequest.requestorId(), "ADMIN_KICK_SERVER")) {
             LOG.warnf("Unauthorized kick request with target: %s", kickPlayerRequest.playerId());
             return;
         }
@@ -50,12 +50,12 @@ public class AdminService {
     }
 
     private void closePlayerGame(AdminRequest.ClosePlayerGame closePlayerGameRequest) {
-        if (!playerRepository.playerHasPermission(closePlayerGameRequest.requestorId(), "ADMIN_KICK_SERVER")) {
+        if (playerRepository.playerLacksPermission(closePlayerGameRequest.requestorId(), "ADMIN_KICK_SERVER")) {
             LOG.warnf("Unauthorized kick request with target: %s", closePlayerGameRequest.playerId());
             return;
         }
 
-        playerService.kickPlayer(closePlayerGameRequest.playerId());
+        playerService.closePlayerGame(closePlayerGameRequest.playerId());
     }
 
 

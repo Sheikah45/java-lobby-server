@@ -20,8 +20,18 @@ quarkus:
     host-validation:
       allowed-hosts: ${ALLOWED_HOST:ws.faforever.localhost}
 
+mp:
+  jwt:
+    verify:
+      issuer: ${HYDRA_TOKEN_ISSUER:http://ory-hydra:4444}
+      key-format: JWKS
+      publickey:
+        location: ${HYDRA_JWKS_URL:http://localhost:4444/.well-known/jwks.json}
+
 "%test":
   quarkus:
+    scheduler:
+      enabled: false
     log:
       console:
         json:
@@ -52,11 +62,3 @@ quarkus:
     hibernate-orm:
       log:
         sql: true
-
-mp:
-  jwt:
-    verify:
-      issuer: ${HYDRA_TOKEN_ISSUER:http://ory-hydra:4444}
-      key-format: JWKS
-      publickey:
-        location: ${HYDRA_JWKS_URL:http://localhost:4444/.well-known/jwks.json}

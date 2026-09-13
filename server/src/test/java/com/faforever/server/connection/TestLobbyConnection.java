@@ -1,6 +1,7 @@
 package com.faforever.server.connection;
 
 import com.faforever.server.message.LobbyMessage;
+import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,10 +16,19 @@ public class TestLobbyConnection implements LobbyConnection {
         return List.copyOf(sentMessages);
     }
 
+    public void reset() {
+        sentMessages.clear();
+        closed = false;
+    }
+
+    public boolean closed() {
+        return closed;
+    }
+
     @Override
     public void sendAndAwait(LobbyMessage.Server message) {
         if (closed) {
-            throw new IllegalStateException("Connection closed");
+            throw new IllegalStateException("Test connection closed");
         }
         sentMessages.add(message);
     }

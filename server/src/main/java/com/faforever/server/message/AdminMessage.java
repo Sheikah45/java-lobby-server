@@ -20,9 +20,27 @@ public sealed interface AdminMessage {
     @JsonCreator
     static AdminMessage.Client of(@JsonProperty("action") Action action, @JsonAnySetter Map<String, String> properties) {
         return switch (action) {
-            case BROADCAST -> new BroadcastRequest(properties.get("message"));
-            case CLOSE_GAME -> new ClosePlayerGameRequest(Integer.parseInt(properties.get("user_id")));
-            case CLOSE_LOBBY -> new KickPlayerRequest(Integer.parseInt(properties.get("user_id")));
+            case BROADCAST -> {
+                String message = properties.get("message");
+                if (message == null) {
+                    throw new IllegalArgumentException("Missing required property `message`");
+                }
+                yield new BroadcastRequest(message);
+            }
+            case CLOSE_GAME -> {
+                String userId = properties.get("user_id");
+                if (userId == null) {
+                    throw new IllegalArgumentException("Missing required property `user_id`");
+                }
+                yield new ClosePlayerGameRequest(Integer.parseInt(userId));
+            }
+            case CLOSE_LOBBY -> {
+                String userId = properties.get("user_id");
+                if (userId == null) {
+                    throw new IllegalArgumentException("Missing required property `user_id`");
+                }
+                yield new KickPlayerRequest(Integer.parseInt(userId));
+            }
         };
     }
 

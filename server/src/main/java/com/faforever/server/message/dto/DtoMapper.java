@@ -3,12 +3,13 @@ package com.faforever.server.message.dto;
 import com.faforever.server.config.DefaultMapperConfig;
 import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.game.Game;
+import com.faforever.server.mapstruct.OptionalMapper;
 import com.faforever.server.message.GameMessage;
 import com.faforever.server.player.Player;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
-import com.faforever.server.social.Avatar;
-import com.faforever.server.social.State;
+import com.faforever.server.player.Avatar;
+import com.faforever.server.player.State;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -16,15 +17,14 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
-@Mapper(config = DefaultMapperConfig.class)
+@Mapper(config = DefaultMapperConfig.class, uses = OptionalMapper.class)
 public abstract class DtoMapper {
 
     public abstract Set<PlayerInfo> map(Collection<Player> players);
 
-    @Mapping(target = ".", source = "details")
     @Mapping(target = "state", source = "state")
     @Mapping(target = "ratings", source = "leaderboardRatings")
-    @Mapping(target = "login", source = "details.username")
+    @Mapping(target = "login", source = "username")
     public abstract PlayerInfo map(Player player);
 
     public PlayerInfo.State map(State state) {
@@ -51,7 +51,7 @@ public abstract class DtoMapper {
 
     @Mapping(target = ".", source = "details" )
     @Mapping(target = "uid", source = "details.id")
-    @Mapping(target = "host", source = "details.host.details.username")
+    @Mapping(target = "host", source = "details.host.username")
     @Mapping(target = "state", ignore = true)
     @Mapping(target = "simMods", ignore = true)
     @Mapping(target = "passwordProtected", ignore = true)

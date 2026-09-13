@@ -13,6 +13,5 @@ import org.mapstruct.ReportingPolicy;
         collectionMappingStrategy = CollectionMappingStrategy.TARGET_IMMUTABLE,
         typeConversionPolicy = ReportingPolicy.ERROR, injectionStrategy = InjectionStrategy.CONSTRUCTOR,
         nullValueIterableMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT,
-        nullValueMapMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT,
-        uses = OptionalMapper.class)
+        nullValueMapMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT)
 public interface DefaultMapperConfig {}

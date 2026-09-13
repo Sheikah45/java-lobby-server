@@ -3,6 +3,7 @@ package com.faforever.server.connection;
 import com.faforever.server.admin.AdminRequest;
 import com.faforever.server.admin.AdminService;
 import com.faforever.server.broadcast.BroadcastService;
+import com.faforever.server.exception.ClientException;
 import com.faforever.server.game.GPGService;
 import com.faforever.server.game.Game;
 import com.faforever.server.game.GameService;
@@ -15,11 +16,9 @@ import com.faforever.server.message.LobbyMessage;
 import com.faforever.server.message.MatchmakerMessage;
 import com.faforever.server.message.SocialMessage;
 import com.faforever.server.message.dto.DtoMapper;
-import com.faforever.server.player.Player;
+import com.faforever.server.player.Avatar;
 import com.faforever.server.player.PlayerService;
-import com.faforever.server.social.Avatar;
-import com.faforever.server.social.SocialRequest;
-import com.faforever.server.social.SocialService;
+import com.faforever.server.player.SocialRequest;
 import com.faforever.server.utils.NoThrowCloseable;
 import io.smallrye.jwt.auth.principal.JWTParser;
 import io.smallrye.jwt.auth.principal.ParseException;
@@ -30,13 +29,9 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.jboss.logging.MDC;
 import org.jspecify.annotations.Nullable;
 
-import java.time.OffsetDateTime;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.SplittableRandom;
 
 @JBossLog
@@ -45,7 +40,6 @@ import java.util.SplittableRandom;
 public class SessionController {
 
     private final BroadcastService broadcastService;
-    private final SocialService socialService;
     private final AdminService adminService;
     private final MatchmakerService matchmakerService;
     private final GameService gameService;
@@ -58,13 +52,13 @@ public class SessionController {
 
     private LobbyConnection connection = NoConnection.getInstance();
     private @Nullable UserAgent userAgent;
-    private @Nullable Player player;
+    private @Nullable Integer playerId;
     private @Nullable Game game;
 
     private final long sessionId = new SplittableRandom().nextLong(Long.MAX_VALUE);
 
     public boolean isAuthenticated() {
-        return player != null;
+        return playerId != null;
     }
 
     public void setConnection(LobbyConnection connection) {
@@ -75,13 +69,10 @@ public class SessionController {
             throw new IllegalArgumentException("Connection being set is not active");
         }
         this.connection = connection;
-        broadcastService.registerSession(this);
     }
 
     public void clearConnection() {
-        if (player != null) {
-            player.removeSession(this);
-        }
+        playerService.unregisterSession(this);
         broadcastService.unregisterSession(this);
         connection = NoConnection.getInstance();
     }
@@ -99,42 +90,24 @@ public class SessionController {
         return Optional.ofNullable(userAgent);
     }
 
-    public Optional<Player> player() {
-        return Optional.ofNullable(player);
+    void setPlayerId(int playerId) {
+        this.playerId = playerId;
+    }
+
+    public Optional<Integer> playerId() {
+        return Optional.ofNullable(playerId);
     }
 
     public Optional<Game> game() {
         return Optional.ofNullable(game);
     }
 
-    public void broadcast(LobbyMessage.Broadcast message) {
-        connection.sendAndAwait(message);
-    }
-
     public boolean isActive() {
         return !(connection instanceof NoConnection);
     }
 
-    void initializePlayer(int playerId) {
-        if (this.player != null) {
-            throw new IllegalStateException("Player already set for the session");
-        }
-        LOG.debug("Initializing player");
-
-        player = playerService.getOrCreatePlayer(playerId);;
-        player.addSession(this);
-        connection.sendAndAwait(new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player), OffsetDateTime.now()));
-        Set<String> channels = new HashSet<>();
-        Optional.ofNullable(player.getDetails().clan()).map("#%s_clan"::formatted).ifPresent(channels::add);
-        connection.sendAndAwait(new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds()));
-    }
-
     long sessionId() {
         return sessionId;
-    }
-
-    private void sendAvatars(Collection<Avatar> avatars) {
-        connection.sendAndAwait(new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars)));
     }
 
     private void launchGame(Game game) {
@@ -157,24 +130,17 @@ public class SessionController {
         this.game = null;
     }
 
-    public void sendGpgHostGame() {
-        connection.sendAndAwait(new GPGMessage.HostGame(List.of(game().orElseThrow().getMapName())));
-    }
-
     public void kick() {
         connection.sendAndAwait(new AdminMessage.NoticeInfo(null, AdminMessage.Style.KICK));
         connection.close();
     }
 
-    public void closeGame() {
-        if (game == null) {
-            return;
-        }
-        connection.sendAndAwait(new AdminMessage.NoticeInfo(null, AdminMessage.Style.KILL));
+    public void sendMessage(LobbyMessage.Server message) {
+        connection.sendAndAwait(message);
     }
 
     public void handleMessage(LobbyMessage.Client message) {
-        try(NoThrowCloseable _ = populateMDC()) {
+        try (NoThrowCloseable _ = populateMDC()) {
             switch (message) {
                 case ConnectionMessage.Client connectionMessage -> handleConnectionMessage(connectionMessage);
                 case SocialMessage.Client socialMessage -> handleSocialMessage(socialMessage);
@@ -189,14 +155,8 @@ public class SessionController {
 
     private NoThrowCloseable populateMDC() {
         MDC.put("sessionId", sessionId);
-        player()
-                         .map(Player::getDetails)
-                         .map(Player.Details::id)
-                         .ifPresent(playerId -> MDC.put("playerId", playerId));
-        game()
-                         .map(Game::getDetails)
-                         .map(Game.Details::id)
-                         .ifPresent(gameId -> MDC.put("gameId", gameId));
+        playerId().ifPresent(playerId -> MDC.put("playerId", playerId));
+        game().map(Game::getDetails).map(Game.Details::id).ifPresent(gameId -> MDC.put("gameId", gameId));
 
         return () -> {
             MDC.remove("sessionId");
@@ -209,79 +169,76 @@ public class SessionController {
         switch (message) {
             case ConnectionMessage.Ping() -> connection.sendAndAwait(new ConnectionMessage.Pong());
             case ConnectionMessage.Pong() -> {}
-            case ConnectionMessage.SessionRequest sessionRequest -> {
-                setUserAgent(new UserAgent(sessionRequest.userAgent(), sessionRequest.version()));
+            case ConnectionMessage.SessionRequest(String agent, String version) -> {
+                setUserAgent(new UserAgent(agent, version));
                 connection.sendAndAwait(new ConnectionMessage.SessionResponse(sessionId));
             }
-            case ConnectionMessage.AuthenticateRequest authenticateRequest -> {
-                String token = authenticateRequest.token();
+            case ConnectionMessage.AuthenticateRequest(String token, String uniqueId) -> {
+                if (this.playerId != null) {
+                    throw new IllegalStateException("Player already set for the session");
+                }
+
                 JsonWebToken jwt;
                 try {
                     jwt = jwtParser.parse(token);
                 } catch (ParseException e) {
                     throw new RuntimeException(e);
                 }
-                int playerId = Integer.parseInt(jwt.getSubject());
-                initializePlayer(playerId);
-                Collection<Player> players = playerService.getOnlinePlayers();
-                connection.sendAndAwait(new SocialMessage.PlayerInfoList(dtoMapper.map(players)));
+                setPlayerId(Integer.parseInt(jwt.getSubject()));
+                playerService.registerSession(this);
+                broadcastService.registerSession(this);
             }
         }
     }
 
     private void handleSocialMessage(SocialMessage.Client message) {
-        Player player = player().orElseThrow();
-        int playerId = player.getDetails().id();
+        int playerId = getAuthenticatedPlayerId();
         switch (message) {
-            case SocialMessage.SocialAddRequest addRequest -> {
-                Integer friendId = addRequest.friendId();
+            case SocialMessage.SocialAddRequest(Integer friendId, Integer foeId) -> {
                 if (friendId != null) {
-                    socialService.changeSocialRelationship(new SocialRequest.FriendOrFoe.AddFriend(playerId, friendId));
-                    player.addFriend(friendId);
-                    player.removeFoe(friendId);
+                    playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Add(playerId, friendId,
+                            SocialRequest.FriendOrFoe.Status.FRIEND));
                 }
-                Integer foeId = addRequest.foeId();
                 if (foeId != null) {
-                    socialService.changeSocialRelationship(new SocialRequest.FriendOrFoe.AddFoe(playerId, foeId));
-                    player.addFoe(foeId);
-                    player.removeFriend(foeId);
+                    playerService.changeSocialRelationship(
+                            new SocialRequest.FriendOrFoe.Add(playerId, foeId, SocialRequest.FriendOrFoe.Status.FOE));
                 }
             }
-            case SocialMessage.SocialRemoveRequest removeRequest -> {
-                Integer friendId = removeRequest.friendId();
+            case SocialMessage.SocialRemoveRequest(Integer friendId, Integer foeId) -> {
                 if (friendId != null) {
-                    socialService.changeSocialRelationship(
-                            new SocialRequest.FriendOrFoe.RemoveFriend(playerId, friendId));
-                    player.removeFriend(friendId);
+                    playerService.changeSocialRelationship(
+                            new SocialRequest.FriendOrFoe.Remove(playerId, friendId));
                 }
-                Integer foeId = removeRequest.foeId();
                 if (foeId != null) {
-                    socialService.changeSocialRelationship(new SocialRequest.FriendOrFoe.RemoveFoe(playerId, foeId));
-                    player.removeFoe(foeId);
+                    playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(playerId, foeId));
                 }
             }
-            case SocialMessage.SelectAvatarRequest selectRequest ->
-                    socialService.selectAvatar(new SocialRequest.SelectAvatar(playerId, selectRequest.avatarUrl()));
-            case SocialMessage.ListAvatarsRequest _ ->
-                    sendAvatars(socialService.getAvatars(new SocialRequest.Avatars(playerId)));
+            case SocialMessage.SelectAvatarRequest(String avatarUrl) ->
+                    playerService.selectAvatar(new SocialRequest.SelectAvatar(playerId, avatarUrl));
+            case SocialMessage.RemoveAvatarRequest _ ->
+                    playerService.removeAvatar(new SocialRequest.RemoveAvatar(playerId));
+            case SocialMessage.ListAvatarsRequest _ -> {
+                Collection<Avatar> avatars = playerService.getAvatars(new SocialRequest.Avatars(playerId));
+                connection.sendAndAwait(new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars)));
+            }
         }
     }
 
     private void handleAdminMessage(AdminMessage.Client message) {
-        int playerId = player().orElseThrow().getDetails().id();
+        int playerId = getAuthenticatedPlayerId();
         AdminRequest adminRequest = switch (message) {
-            case AdminMessage.BroadcastRequest broadcastRequest ->
-                    new AdminRequest.Broadcast(playerId, broadcastRequest.message());
-            case AdminMessage.KickPlayerRequest kickPlayerRequest ->
-                    new AdminRequest.KickPlayer(playerId, kickPlayerRequest.playerId());
-            case AdminMessage.ClosePlayerGameRequest closePlayerGameRequest ->
-                    new AdminRequest.ClosePlayerGame(playerId, closePlayerGameRequest.playerId());
+            case AdminMessage.BroadcastRequest(String broadcastMessage) ->
+                    new AdminRequest.Broadcast(playerId, broadcastMessage);
+            case AdminMessage.KickPlayerRequest(int kickPlayerId) ->
+                    new AdminRequest.KickPlayer(playerId, kickPlayerId);
+            case AdminMessage.ClosePlayerGameRequest(int closePlayerId) ->
+                    new AdminRequest.ClosePlayerGame(playerId, closePlayerId);
         };
         adminService.handleRequest(adminRequest);
     }
 
     private void handleMatchmakerMessage(MatchmakerMessage.Client message) {
-        int playerId = player().orElseThrow().getDetails().id();
+        int playerId = getAuthenticatedPlayerId();
         switch (message) {
             case MatchmakerMessage.GameMatchmakingRequest _ -> {}
             case MatchmakerMessage.InviteToPartyRequest _ -> {}
@@ -297,10 +254,10 @@ public class SessionController {
     }
 
     private void handleGameMessage(GameMessage.Client message) {
-        int playerId = player().orElseThrow().getDetails().id();
+        int playerId = getAuthenticatedPlayerId();
         switch (message) {
             case GameMessage.HostGameRequest hostGameRequest -> {
-                Game game = gameService.createNewGame(player().orElseThrow(), hostGameRequest);
+                Game game = gameService.createNewGame(playerId, hostGameRequest);
                 launchGame(game);
             }
             case GameMessage.JoinGameRequest _ -> {}
@@ -309,9 +266,16 @@ public class SessionController {
     }
 
     private void handleGpgMessage(GPGMessage.Client message) {
+        int playerId = getAuthenticatedPlayerId();
         int gameId = game().orElseThrow().getDetails().id();
-        int playerId = player().orElseThrow().getDetails().id();
         gpgService.handleClientMessage(gameId, playerId, message);
+    }
+
+    private int getAuthenticatedPlayerId() {
+        if (playerId == null) {
+            throw new ClientException("Not authenticated");
+        }
+        return playerId;
     }
 
 }

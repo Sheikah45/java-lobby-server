@@ -14,7 +14,7 @@ public class GPGService {
 
     public void handleClientMessage(int gameId, int sourcePlayerId, GPGMessage.Client message) {
         Game game = gameService.getGame(gameId);
-        boolean isHost = game.getDetails().host().getDetails().id() == sourcePlayerId;
+        boolean isHost = game.getDetails().host().getId() == sourcePlayerId;
         switch (message) {
             case GPGMessage.AIOption aiOption when isHost -> game.addAiOption(
                     aiOption.aiName(),

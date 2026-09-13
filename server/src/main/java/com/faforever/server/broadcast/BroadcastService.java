@@ -25,7 +25,7 @@ public class BroadcastService {
         sessionControllers.stream()
                           .filter(SessionController::isActive)
                           .filter(SessionController::isAuthenticated)
-                          .forEach(sessionController -> executorService.execute(() -> sessionController.broadcast(message)));
+                          .forEach(sessionController -> executorService.execute(() -> sessionController.sendMessage(message)));
     }
 
     public void registerSession(SessionController sessionController) {

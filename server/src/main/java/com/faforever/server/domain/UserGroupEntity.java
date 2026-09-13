@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashSet;
 import java.util.Set;
 
 
@@ -27,7 +28,7 @@ public class UserGroupEntity extends AbstractEntity {
             joinColumns = @JoinColumn(name = "group_id"),
             inverseJoinColumns = @JoinColumn(name = "permission_id")
     )
-    private Set<GroupPermissionEntity> groupPermissions;
+    private Set<GroupPermissionEntity> groupPermissions = new HashSet<>();
 
 
 }

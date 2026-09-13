@@ -1,10 +1,10 @@
 package com.faforever.server.game;
 
 import com.faforever.server.connection.SessionController;
+import com.faforever.server.message.GPGMessage;
 import com.faforever.server.message.dto.GameType;
 import com.faforever.server.message.dto.GameVisibility;
 import com.faforever.server.player.Player;
-import jakarta.enterprise.context.Dependent;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -12,18 +12,17 @@ import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RequiredArgsConstructor
-@Dependent
 public class Game {
 
     private final GameService gameService;
 
-    @Getter
     @Setter(AccessLevel.PACKAGE)
-    private Details details;
+    private @Nullable Details details;
 
     private int desyncs = 0;
 
@@ -34,14 +33,21 @@ public class Game {
 
     private final Map<String, Object> options = new ConcurrentHashMap<>();
 
-    private OffsetDateTime hostedAt;
-    private OffsetDateTime launchedAt;
+    private @Nullable OffsetDateTime hostedAt;
+    private @Nullable OffsetDateTime launchedAt;
     private int maxPlayers;
 
     @Getter
     private boolean enforceRatingRange;
     @Getter
-    private String mapName;
+    private @Nullable String mapName;
+
+    public Details getDetails() {
+        if (details == null) {
+            throw new IllegalStateException("Game not initialized yet");
+        }
+        return details;
+    }
 
     public void setHostedAt(OffsetDateTime hostedAt) {
         this.hostedAt = hostedAt;
@@ -69,7 +75,8 @@ public class Game {
     }
 
     public void addGameConnection(SessionController sessionController) {
-        SessionController existingConnection = playerGameConnectionMap.putIfAbsent(sessionController.player().orElseThrow().getDetails().id(),
+        SessionController existingConnection = playerGameConnectionMap.putIfAbsent(
+                sessionController.playerId().orElseThrow(),
                 sessionController);
         if (existingConnection != null) {
             throw new IllegalStateException("Game connection for player already exists");
@@ -100,7 +107,12 @@ public class Game {
     void markHosted() {
         if (hostedAt == null) {
             hostedAt = OffsetDateTime.now();
-            playerGameConnectionMap.get(details.host.getDetails().id()).sendGpgHostGame();
+            SessionController hostSessionController = playerGameConnectionMap.get(getDetails().host().getId());
+            if (hostSessionController == null) {
+                throw new IllegalStateException("Host connection does not exist");
+            }
+            hostSessionController.sendMessage(new GPGMessage.HostGame(
+                    List.of(mapName)));
             gameService.markDirty(this);
         }
     }

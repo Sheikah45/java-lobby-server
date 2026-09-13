@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLJoinTableRestriction;
 
+import java.util.HashSet;
 import java.util.Set;
 
 @Getter
@@ -45,8 +46,12 @@ public class PlayerEntity extends AbstractEntity {
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "group_id")
     )
-    private Set<UserGroupEntity> userGroups;
+    private Set<UserGroupEntity> userGroups = new HashSet<>();
+
+    @OneToMany
+    @JoinColumn(name = "user_id")
+    private Set<FriendOrFoeEntity> friendOrFoes = new HashSet<>();
 
     @OneToMany(mappedBy = "player")
-    private Set<LeaderboardRatingEntity> leaderboardRatings;
+    private Set<LeaderboardRatingEntity> leaderboardRatings = new HashSet<>();
 }

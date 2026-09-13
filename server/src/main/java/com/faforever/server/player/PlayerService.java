@@ -1,29 +1,26 @@
 package com.faforever.server.player;
 
 import com.faforever.server.broadcast.BroadcastService;
-import com.faforever.server.domain.AvatarEntity;
-import com.faforever.server.domain.ClanEntity;
-import com.faforever.server.domain.PlayerEntity;
+import com.faforever.server.connection.SessionController;
+import com.faforever.server.domain.FriendOrFoeEntity;
+import com.faforever.server.message.AdminMessage;
+import com.faforever.server.message.ConnectionMessage;
 import com.faforever.server.message.SocialMessage;
 import com.faforever.server.message.dto.DtoMapper;
 import com.faforever.server.message.dto.PlayerInfo;
-import com.faforever.server.rating.Leaderboard;
-import com.faforever.server.rating.LeaderboardRating;
-import com.faforever.server.social.Avatar;
-import com.faforever.server.social.FriendOrFoeRepository;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
-import jakarta.transaction.Transactional;
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 
-import java.util.Collection;
+import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @JBossLog
 @RequiredArgsConstructor
@@ -34,23 +31,50 @@ public class PlayerService {
 
     private final PlayerRepository playerRepository;
     private final FriendOrFoeRepository friendOrFoeRepository;
+    private final AssignedAvatarRepository assignedAvatarRepository;
 
     private final DtoMapper dtoMapper;
 
-    private final Instance<Player> playerInstances;
-
     private final Map<Integer, Player> playerIdMap = new ConcurrentHashMap<>();
 
+    private final Map<Player, Set<SessionController>> playerSessionControllerMap = new ConcurrentHashMap<>();
+
+    @Getter(AccessLevel.PACKAGE)
     private final Set<Player> dirtyPlayers = ConcurrentHashMap.newKeySet();
+    @Getter(AccessLevel.PACKAGE)
     private final Set<Player> disconnectedPlayers = ConcurrentHashMap.newKeySet();
 
-    @Transactional
-    public Player getOrCreatePlayer(int playerId) {
-        return playerIdMap.computeIfAbsent(playerId, this::initializePlayer);
+    public void registerSession(SessionController sessionController) {
+        int playerId = sessionController.playerId().orElseThrow();
+        Player player = playerIdMap.computeIfAbsent(playerId, playerRepository::loadPlayer);
+
+        sessionController.sendMessage(
+                new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player), OffsetDateTime.now()));
+
+        Set<String> channels = new HashSet<>();
+        player.getClan().map("#%s_clan"::formatted).ifPresent(channels::add);
+        sessionController.sendMessage(
+                new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds()));
+
+        sessionController.sendMessage(new SocialMessage.PlayerInfoList(dtoMapper.map(playerIdMap.values())));
+
+        Set<SessionController> playerSessionControllers = playerSessionControllerMap.computeIfAbsent(player,
+                _ -> ConcurrentHashMap.newKeySet());
+        boolean newPlayer = playerSessionControllers.isEmpty();
+        playerSessionControllers.add(sessionController);
+        if (newPlayer) {
+            markDirty(player);
+        }
     }
 
-    public Set<Player> getOnlinePlayers() {
-        return Set.copyOf(playerIdMap.values());
+    public void unregisterSession(SessionController sessionController) {
+        sessionController.playerId().map(playerIdMap::get).ifPresent(player -> {
+            Set<SessionController> playerSessions = playerSessionControllerMap.getOrDefault(player, Set.of());
+            playerSessions.remove(sessionController);
+            if (playerSessions.isEmpty()) {
+                markDisconnected(player);
+            }
+        });
     }
 
     public void kickPlayer(int playerId) {
@@ -59,7 +83,7 @@ public class PlayerService {
             return;
         }
 
-        player.kick();
+        playerSessionControllerMap.getOrDefault(player, Set.of()).forEach(SessionController::kick);
     }
 
     public void closePlayerGame(int playerId) {
@@ -68,54 +92,101 @@ public class PlayerService {
             return;
         }
 
-        player.closeGame();
+        playerSessionControllerMap.getOrDefault(player, Set.of())
+                                  .forEach(sessionController -> sessionController.sendMessage(
+                                          new AdminMessage.NoticeInfo(null, AdminMessage.Style.KILL)));
+    }
+
+    public void changeSocialRelationship(SocialRequest.FriendOrFoe friendOrFoeRequest) {
+        int playerId = friendOrFoeRequest.playerId();
+        int targetId = friendOrFoeRequest.targetId();
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            return;
+        }
+        switch (friendOrFoeRequest) {
+            case SocialRequest.FriendOrFoe.Add(_, _, SocialRequest.FriendOrFoe.Status status) -> {
+                FriendOrFoeEntity.Status entityStatus = switch (status) {
+                    case FOE -> FriendOrFoeEntity.Status.FOE;
+                    case FRIEND -> FriendOrFoeEntity.Status.FRIEND;
+                };
+                friendOrFoeRepository.upsertPlayerRelationship(playerId, targetId, entityStatus);
+                switch (entityStatus) {
+                    case FOE -> player.addFoe(targetId);
+                    case FRIEND -> player.addFriend(targetId);
+                }
+            }
+            case SocialRequest.FriendOrFoe.Remove _ -> {
+                friendOrFoeRepository.deletePlayerRelationship(playerId, targetId);
+                player.removeFriendOrFoe(targetId);
+            }
+        }
+    }
+
+    public Set<Avatar> getAvatars(SocialRequest.Avatars avatarsRequest) {
+        return assignedAvatarRepository.findAssignedAvatarsByPlayer(avatarsRequest.playerId());
+    }
+
+    public void selectAvatar(SocialRequest.SelectAvatar selectRequest) {
+        int playerId = selectRequest.playerId();
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            return;
+        }
+
+        String newAvatarUrl = selectRequest.avatarUrl();
+        if (player.getAvatar().map(avatar -> newAvatarUrl.equals(avatar.url())).orElse(false)) {
+            return;
+        }
+
+        Avatar avatar = assignedAvatarRepository.updateSelectedAvatar(playerId, newAvatarUrl);
+        player.setAvatar(avatar);
+        markDirty(player);
+    }
+
+    public void removeAvatar(SocialRequest.RemoveAvatar removeRequest) {
+        int playerId = removeRequest.playerId();
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            return;
+        }
+
+        if (player.getAvatar().isEmpty()) {
+            return;
+        }
+
+        assignedAvatarRepository.removeSelectedAvatar(playerId);
+        player.clearAvatar();
+        markDirty(player);
+    }
+
+    public Player getOnlinePlayer(int playerId) {
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            throw new IllegalArgumentException("Player is not online");
+        }
+        return player;
     }
 
     void markDisconnected(Player player) {
+        if (!playerIdMap.containsKey(player.getId())) {
+            return;
+        }
         disconnectedPlayers.add(player);
     }
 
     void markDirty(Player player) {
+        if (!playerIdMap.containsKey(player.getId())) {
+            return;
+        }
         disconnectedPlayers.remove(player);
         dirtyPlayers.add(player);
-    }
-
-    private Player initializePlayer(int playerId) {
-        PlayerEntity playerEntity = playerRepository.findByIdOptional(playerId).orElseThrow();
-        Player player = playerInstances.get();
-        ClanEntity clan = playerEntity.getClan();
-        String clanTag = clan == null ? null : clan.getTag();
-        player.setDetails(new Player.Details(playerId, playerEntity.getName(), clanTag));
-        AvatarEntity avatar = playerEntity.getSelectedAvatar();
-        if (avatar != null) {
-            player.setAvatar(new Avatar(avatar.getUrl(), avatar.getDescription()));
-        }
-        Collection<LeaderboardRating> leaderboardRatings = playerEntity.getLeaderboardRatings()
-                                                                       .stream()
-                                                                       .map(leaderboardRatingEntity -> {
-                                                                           Leaderboard leaderboard = new Leaderboard(
-                                                                                   leaderboardRatingEntity.getLeaderboard()
-                                                                                                          .getTechnicalName());
-                                                                           return new LeaderboardRating(leaderboard,
-                                                                                   leaderboardRatingEntity.getTotalGames(),
-                                                                                   leaderboardRatingEntity.getMean(),
-                                                                                   leaderboardRatingEntity.getDeviation());
-                                                                       })
-                                                                       .collect(Collectors.toSet());
-        player.setLeaderboardRatings(leaderboardRatings);
-        friendOrFoeRepository.stream("id.playerId", playerId).forEach(friendOrFoe -> {
-            switch (friendOrFoe.getStatus()) {
-                case FOE -> player.addFoe(friendOrFoe.getId().subjectId());
-                case FRIEND -> player.addFriend(friendOrFoe.getId().subjectId());
-            }
-        });
-        return player;
     }
 
     @RunOnVirtualThread
     @Scheduled(every = "1s", skipExecutionIf = Scheduled.ApplicationNotRunning.class,
             concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
-    void updateDirtyPlayers() {
+    void sendUpdateForDirtyPlayers() {
         Set<Player> frozenDirtyPlayers = Set.copyOf(dirtyPlayers);
         if (frozenDirtyPlayers.isEmpty()) {
             return;
@@ -136,7 +207,7 @@ public class PlayerService {
             return;
         }
 
-        frozenDisconnectedPlayers.stream().map(Player::getDetails).map(Player.Details::id).forEach(playerIdMap::remove);
+        frozenDisconnectedPlayers.stream().map(Player::getId).forEach(playerIdMap::remove);
 
         dirtyPlayers.addAll(frozenDisconnectedPlayers);
         disconnectedPlayers.removeAll(frozenDisconnectedPlayers);

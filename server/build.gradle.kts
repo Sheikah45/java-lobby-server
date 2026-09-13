@@ -1,6 +1,11 @@
+import net.ltgt.gradle.errorprone.errorprone
+import net.ltgt.gradle.nullaway.nullaway
+
 plugins {
     java
     id("io.quarkus")
+    id("net.ltgt.errorprone") version("5.1.0")
+    id("net.ltgt.nullaway") version("3.0.0")
 }
 
 repositories {
@@ -9,6 +14,9 @@ repositories {
 }
 
 dependencies {
+    errorprone("com.uber.nullaway:nullaway:0.13.4")
+    errorprone("com.google.errorprone:error_prone_core:2.49.0")
+
     implementation(enforcedPlatform("io.quarkus.platform:quarkus-bom:3.39.1"))
     implementation("io.quarkus:quarkus-messaging-rabbitmq")
     implementation("io.quarkus:quarkus-websockets-next")
@@ -30,6 +38,8 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
 
     testImplementation("io.quarkus:quarkus-junit")
+    testImplementation("io.quarkus:quarkus-junit-component")
+    testImplementation("io.quarkus:quarkus-junit-mockito")
     testImplementation("org.hamcrest:hamcrest")
 }
 
@@ -41,10 +51,25 @@ java {
     targetCompatibility = JavaVersion.VERSION_25
 }
 
+nullaway {
+    jspecifyMode = true
+    onlyNullMarked = true
+}
+
 tasks.withType<Test> {
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
 }
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.compilerArgs.add("-parameters")
+    options.errorprone {
+        disableAllChecks = true
+        nullaway {
+            error()
+            assertsEnabled = true
+            treatGeneratedAsUnannotated = true
+            excludedFieldAnnotations.add("io.quarkus.test.InjectMock")
+            excludedFieldAnnotations.add("io.quarkus.test.junit.mockito.InjectSpy")
+        }
+    }
 }

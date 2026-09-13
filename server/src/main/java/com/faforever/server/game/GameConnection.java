@@ -23,8 +23,4 @@ class GameConnection {
 
     }
 
-    Player getPlayer() {
-        return sessionController.player().orElseThrow();
-    }
-
 }

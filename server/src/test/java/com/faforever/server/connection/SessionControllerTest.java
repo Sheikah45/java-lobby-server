@@ -1,25 +1,51 @@
 package com.faforever.server.connection;
 
-import com.faforever.server.domain.FriendOrFoeEntity;
+import com.faforever.server.admin.AdminRequest;
+import com.faforever.server.admin.AdminService;
+import com.faforever.server.broadcast.BroadcastService;
+import com.faforever.server.exception.ClientException;
+import com.faforever.server.game.GPGService;
+import com.faforever.server.game.GameService;
+import com.faforever.server.mapstruct.OptionalMapperImpl;
+import com.faforever.server.matchmaker.MatchmakerService;
+import com.faforever.server.message.AdminMessage;
 import com.faforever.server.message.ConnectionMessage;
+import com.faforever.server.message.GPGMessage;
+import com.faforever.server.message.GameMessage;
+import com.faforever.server.message.MatchmakerMessage;
 import com.faforever.server.message.SocialMessage;
-import com.faforever.server.player.Player;
-import com.faforever.server.social.FriendOrFoeRepository;
-import io.quarkus.test.TestTransaction;
-import io.quarkus.test.junit.QuarkusTest;
+import com.faforever.server.message.dto.AvatarInfo;
+import com.faforever.server.message.dto.DtoMapperImpl;
+import com.faforever.server.message.dto.GameAccess;
+import com.faforever.server.message.dto.GameVisibility;
+import com.faforever.server.message.dto.MatchmakerState;
+import com.faforever.server.player.Avatar;
+import com.faforever.server.player.PlayerService;
+import com.faforever.server.player.SocialRequest;
+import io.quarkus.test.InjectMock;
+import io.quarkus.test.component.QuarkusComponentTest;
+import io.smallrye.jwt.auth.principal.JWTParser;
+import io.smallrye.jwt.auth.principal.ParseException;
 import jakarta.inject.Inject;
-import lombok.RequiredArgsConstructor;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Set;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-@QuarkusTest
-@RequiredArgsConstructor
-@TestTransaction
+@QuarkusComponentTest(value = {DtoMapperImpl.class, OptionalMapperImpl.class})
 class SessionControllerTest {
 
     private static final int PLAYER_ID = 1;
@@ -27,85 +53,185 @@ class SessionControllerTest {
     @Inject
     SessionController sessionController;
 
-    @Inject
-    FriendOrFoeRepository friendOrFoeRepository;
+    @InjectMock
+    private PlayerService playerService;
+    @InjectMock
+    private BroadcastService broadcastService;
+    @InjectMock
+    private AdminService adminService;
+    @InjectMock
+    private MatchmakerService matchmakerService;
+    @InjectMock
+    private GameService gameService;
+    @InjectMock
+    private GPGService gpgService;
+
+    @InjectMock
+    private JWTParser jwtParser;
 
     private final TestLobbyConnection connection = new TestLobbyConnection();
 
     @BeforeEach
-    void setup() {
+    void setConnection() {
         sessionController.setConnection(connection);
     }
 
     @Test
-    void testPing() {
-        sessionController.handleMessage(new ConnectionMessage.Ping());
-        assertThat(connection.getSentMessages(), contains(new ConnectionMessage.Pong()));
+    void testUnauthenticatedClientMessage() {
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new SocialMessage.SocialAddRequest(null, null)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new SocialMessage.SocialRemoveRequest(null, null)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new SocialMessage.SelectAvatarRequest("")));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new SocialMessage.RemoveAvatarRequest()));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new SocialMessage.ListAvatarsRequest()));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new AdminMessage.BroadcastRequest("")));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new AdminMessage.KickPlayerRequest(0)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new AdminMessage.ClosePlayerGameRequest(0)));
+        assertThrows(ClientException.class, () -> sessionController.handleMessage(
+                new MatchmakerMessage.GameMatchmakingRequest("", MatchmakerState.START)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.InviteToPartyRequest(0)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.AcceptInviteToPartyRequest(0)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.IsReadyResponse("")));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.KickPlayerFromPartyRequest(0)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.LeavePartyRequest()));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.MatchmakerInfoRequest()));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.SelectPartyFactionsRequest(Set.of())));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.SetPlayerVetoesRequest(List.of())));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new MatchmakerMessage.UnreadyPartyRequest()));
+        assertThrows(ClientException.class, () -> sessionController.handleMessage(
+                new GameMessage.HostGameRequest(null, "", null, GameAccess.PUBLIC, "", GameVisibility.PUBLIC, null,
+                        null, false)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new GameMessage.JoinGameRequest(0, null)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new GameMessage.RestoreGameSessionRequest(0)));
+        assertThrows(ClientException.class,
+                () -> sessionController.handleMessage(new GPGMessage.Bottleneck(List.of())));
+
+        verifyNoInteractions(playerService, broadcastService, adminService, gameService, gpgService, matchmakerService);
     }
 
-    @Test
-    void testPong() {
-        sessionController.handleMessage(new ConnectionMessage.Pong());
-        assertThat(connection.getSentMessages(), hasSize(0));
+    @Nested
+    class Connection {
+        @Test
+        void testPing() {
+            sessionController.handleMessage(new ConnectionMessage.Ping());
+            assertThat(connection.getSentMessages(), contains(new ConnectionMessage.Pong()));
+        }
+
+        @Test
+        void testPong() {
+            sessionController.handleMessage(new ConnectionMessage.Pong());
+            assertThat(connection.getSentMessages(), hasSize(0));
+        }
+
+        @Test
+        void testSessionRequest() {
+            UserAgent userAgent = new UserAgent("userAgent", "1.0");
+            sessionController.handleMessage(
+                    new ConnectionMessage.SessionRequest(userAgent.agent(), userAgent.version()));
+            assertThat(connection.getSentMessages(),
+                    contains(new ConnectionMessage.SessionResponse(sessionController.sessionId())));
+            assertThat(sessionController.userAgent().orElseThrow(), equalTo(userAgent));
+        }
+
+        @Test
+        void testAuthenticateRequest() throws ParseException {
+            JsonWebToken jsonWebToken = mock();
+            when(jsonWebToken.getSubject()).thenReturn(Integer.toString(PLAYER_ID));
+            when(jwtParser.parse("")).thenReturn(jsonWebToken);
+
+            sessionController.handleMessage(
+                    new ConnectionMessage.AuthenticateRequest("", ""));
+
+            assertThat(sessionController.playerId().orElseThrow(), equalTo(PLAYER_ID));
+            verify(playerService).registerSession(sessionController);
+            verify(broadcastService).registerSession(sessionController);
+        }
     }
 
-    @Test
-    void testSessionRequest() {
-        UserAgent userAgent = new UserAgent("userAgent", "1.0");
-        sessionController.handleMessage(
-                new ConnectionMessage.SessionRequest(userAgent.agent(), userAgent.version()));
-        assertThat(connection.getSentMessages(),
-                contains(new ConnectionMessage.SessionResponse(sessionController.sessionId())));
-        assertThat(sessionController.userAgent().orElseThrow(), equalTo(userAgent));
-    }
+    @Nested
+    class Authenticated {
 
-    @Test
-    void testFriendChange() {
-        friendOrFoeRepository.deleteAll();
-        sessionController.initializePlayer(PLAYER_ID);
-        Player player = sessionController.player().orElseThrow();
+        @BeforeEach
+        void setup() {
+            SessionControllerTestUtils.setSessionPlayer(sessionController, PLAYER_ID);
+        }
 
-        assertThat(player.getFriendIds(), hasSize(0));
-        assertThat(player.getFoeIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.list("id.playerId", PLAYER_ID), hasSize(0));
+        @Test
+        void testFriendFoeRequest() {
+            int friendId = 2;
+            sessionController.handleMessage(new SocialMessage.SocialAddRequest(friendId, null));
+            verify(playerService).changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, friendId, SocialRequest.FriendOrFoe.Status.FRIEND));
 
-        int otherId = 2;
-        sessionController.handleMessage(new SocialMessage.SocialAddRequest(otherId, null));
+            int foeId = 3;
+            sessionController.handleMessage(new SocialMessage.SocialAddRequest(null, foeId));
+            verify(playerService).changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, foeId, SocialRequest.FriendOrFoe.Status.FOE));
 
-        assertThat(player.getFriendIds(), contains(otherId));
-        assertThat(player.getFoeIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.findById(new FriendOrFoeEntity.Id(PLAYER_ID, otherId)).getStatus(),
-                equalTo(FriendOrFoeEntity.Status.FRIEND));
+            sessionController.handleMessage(new SocialMessage.SocialRemoveRequest(friendId, null));
+            verify(playerService).changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(PLAYER_ID, friendId));
 
-        sessionController.handleMessage(new SocialMessage.SocialRemoveRequest(otherId, null));
+            sessionController.handleMessage(new SocialMessage.SocialRemoveRequest(null, foeId));
+            verify(playerService).changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(PLAYER_ID, foeId));
+        }
 
-        assertThat(player.getFriendIds(), hasSize(0));
-        assertThat(player.getFoeIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.list("id.playerId", PLAYER_ID), hasSize(0));
-    }
+        @Test
+        void testAvatarSelectionRequest() {
+            sessionController.handleMessage(new SocialMessage.SelectAvatarRequest("temp"));
+            verify(playerService).selectAvatar(new SocialRequest.SelectAvatar(PLAYER_ID, "temp"));
 
-    @Test
-    void testFoeChange() {
-        friendOrFoeRepository.deleteAll();
-        sessionController.initializePlayer(PLAYER_ID);
-        Player player = sessionController.player().orElseThrow();
+            sessionController.handleMessage(new SocialMessage.RemoveAvatarRequest());
+            verify(playerService).removeAvatar(new SocialRequest.RemoveAvatar(PLAYER_ID));
+        }
 
-        assertThat(player.getFriendIds(), hasSize(0));
-        assertThat(player.getFoeIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.list("id.playerId", PLAYER_ID), hasSize(0));
+        @Test
+        void testAvatarListRequest() {
+            when(playerService.getAvatars(new SocialRequest.Avatars(PLAYER_ID))).thenReturn(
+                    Set.of(new Avatar("temp", "temporary")));
+            sessionController.handleMessage(new SocialMessage.ListAvatarsRequest());
 
-        int otherId = 2;
-        sessionController.handleMessage(new SocialMessage.SocialAddRequest(null, otherId));
+            assertThat(connection.getSentMessages(),
+                    contains(new SocialMessage.AvatarInfoList(List.of(new AvatarInfo("temp", "temporary")))));
 
-        assertThat(player.getFoeIds(), contains(otherId));
-        assertThat(player.getFriendIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.findById(new FriendOrFoeEntity.Id(PLAYER_ID, otherId)).getStatus(),
-                equalTo(FriendOrFoeEntity.Status.FOE));
+        }
 
-        sessionController.handleMessage(new SocialMessage.SocialRemoveRequest(null, otherId));
+        @Test
+        void testBroadcastRequest() {
+            sessionController.handleMessage(new AdminMessage.BroadcastRequest("test"));
 
-        assertThat(player.getFoeIds(), hasSize(0));
-        assertThat(player.getFriendIds(), hasSize(0));
-        assertThat(friendOrFoeRepository.list("id.playerId", PLAYER_ID), hasSize(0));
+            verify(adminService).handleRequest(new AdminRequest.Broadcast(PLAYER_ID, "test"));
+        }
+
+        @Test
+        void testKickRequest() {
+            sessionController.handleMessage(new AdminMessage.KickPlayerRequest(2));
+
+            verify(adminService).handleRequest(new AdminRequest.KickPlayer(PLAYER_ID, 2));
+        }
+
+        @Test
+        void testCloseGameRequest() {
+            sessionController.handleMessage(new AdminMessage.ClosePlayerGameRequest(2));
+
+            verify(adminService).handleRequest(new AdminRequest.ClosePlayerGame(PLAYER_ID, 2));
+        }
     }
 }

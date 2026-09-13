@@ -60,7 +60,10 @@ public sealed interface SocialMessage  {
         static AvatarRequest of(@JsonProperty("action") Action action, @JsonAnySetter Map<String, String> properties) {
             return switch (action) {
                 case LIST_AVATAR -> new ListAvatarsRequest();
-                case SELECT -> new SelectAvatarRequest(properties.get("avatar"));
+                case SELECT -> {
+                    String avatarUrl = properties.get("avatar");
+                    yield avatarUrl == null ? new RemoveAvatarRequest() : new SelectAvatarRequest(avatarUrl);
+                }
             };
         }
 
@@ -69,6 +72,8 @@ public sealed interface SocialMessage  {
     record ListAvatarsRequest() implements AvatarRequest {}
 
     record SelectAvatarRequest(
-            @JsonProperty("avatar") @Nullable String avatarUrl
+            @JsonProperty("avatar") String avatarUrl
     ) implements AvatarRequest {}
+
+    record RemoveAvatarRequest() implements AvatarRequest {}
 }
