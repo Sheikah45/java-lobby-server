@@ -1,7 +1,7 @@
 package com.faforever.server.connection;
 
 
-import com.faforever.server.message.LobbyMessage;
+import com.faforever.server.message.external.LobbyMessage;
 
 public interface LobbyConnection {
 

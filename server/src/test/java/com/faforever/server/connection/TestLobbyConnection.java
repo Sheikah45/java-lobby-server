@@ -1,7 +1,6 @@
 package com.faforever.server.connection;
 
-import com.faforever.server.message.LobbyMessage;
-import lombok.Getter;
+import com.faforever.server.message.external.LobbyMessage;
 
 import java.util.ArrayList;
 import java.util.List;

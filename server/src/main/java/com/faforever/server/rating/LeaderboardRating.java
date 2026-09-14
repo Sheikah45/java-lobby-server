@@ -7,7 +7,7 @@ public record LeaderboardRating(
         double deviation
 ) {
 
-    double displayedRating() {
+    public double displayedRating() {
         return mean - 3 * deviation;
     }
 }

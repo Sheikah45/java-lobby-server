@@ -6,7 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
 @ApplicationScoped
-public class PlayerRepository implements PanacheRepositoryBase<PlayerEntity, Integer> {
+class PlayerRepository implements PanacheRepositoryBase<PlayerEntity, Integer> {
 
     @Transactional
     public boolean playerLacksPermission(int playerId, String permission) {

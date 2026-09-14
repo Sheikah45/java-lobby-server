@@ -1,8 +1,9 @@
 package com.faforever.server.admin;
 
-import com.faforever.server.broadcast.BroadcastService;
-import com.faforever.server.message.AdminMessage;
-import com.faforever.server.player.PlayerRepository;
+import com.faforever.server.game.GameService;
+import com.faforever.server.message.MessageEmitter;
+import com.faforever.server.message.external.AdminMessage;
+import com.faforever.server.message.internal.MessageRequest;
 import com.faforever.server.player.PlayerService;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -14,9 +15,9 @@ import lombok.extern.jbosslog.JBossLog;
 public class AdminService {
 
     private final PlayerService playerService;
-    private final BroadcastService broadcastService;
+    private final GameService gameService;
 
-    private final PlayerRepository playerRepository;
+    private final MessageEmitter messageEmitter;
 
     public void handleRequest(AdminRequest request) {
         switch (request) {
@@ -32,30 +33,30 @@ public class AdminService {
             return;
         }
 
-        if (playerRepository.playerLacksPermission(broadcastRequest.requestorId(), "ADMIN_BROADCAST_MESSAGE")) {
+;        if (playerService.sessionLacksPermission(broadcastRequest.requestorSessionId(), "ADMIN_BROADCAST_MESSAGE")) {
             LOG.warnf("Unauthorized broadcast request: %s", broadcastRequest.message());
             return;
         }
 
-        broadcastService.broadcast(new AdminMessage.NoticeInfo(message, AdminMessage.Style.INFO));
+        playerService.broadcast(new AdminMessage.NoticeInfo(message, AdminMessage.Style.INFO));
     }
 
     private void kickPlayer(AdminRequest.KickPlayer kickPlayerRequest) {
-        if (playerRepository.playerLacksPermission(kickPlayerRequest.requestorId(), "ADMIN_KICK_SERVER")) {
+        if (playerService.sessionLacksPermission(kickPlayerRequest.requestorSessionId(), "ADMIN_KICK_SERVER")) {
             LOG.warnf("Unauthorized kick request with target: %s", kickPlayerRequest.playerId());
             return;
         }
 
-        playerService.kickPlayer(kickPlayerRequest.playerId());
+        messageEmitter.send(new MessageRequest.KickPlayer(kickPlayerRequest.playerId()));
     }
 
     private void closePlayerGame(AdminRequest.ClosePlayerGame closePlayerGameRequest) {
-        if (playerRepository.playerLacksPermission(closePlayerGameRequest.requestorId(), "ADMIN_KICK_SERVER")) {
+        if (playerService.sessionLacksPermission(closePlayerGameRequest.requestorSessionId(), "ADMIN_KICK_SERVER")) {
             LOG.warnf("Unauthorized kick request with target: %s", closePlayerGameRequest.playerId());
             return;
         }
 
-        playerService.closePlayerGame(closePlayerGameRequest.playerId());
+        gameService.closePlayerGame(closePlayerGameRequest.playerId());
     }
 
 

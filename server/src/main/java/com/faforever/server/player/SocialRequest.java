@@ -2,20 +2,21 @@ package com.faforever.server.player;
 
 public sealed interface SocialRequest {
 
+    long sessionId();
+
     sealed interface FriendOrFoe extends SocialRequest {
 
-        int playerId();
 
         int targetId();
 
         record Add(
-                int playerId,
+                long sessionId,
                 int targetId,
                 Status status
         ) implements FriendOrFoe {}
 
         record Remove(
-                int playerId,
+                long sessionId,
                 int targetId
         ) implements FriendOrFoe {}
 
@@ -25,13 +26,13 @@ public sealed interface SocialRequest {
         }
     }
 
-    record Avatars(int playerId) implements SocialRequest {}
+    record Avatars(long sessionId) implements SocialRequest {}
 
     record SelectAvatar(
-            int playerId,
+            long sessionId,
             String avatarUrl
     ) implements SocialRequest {}
 
-    record RemoveAvatar(int playerId) implements SocialRequest {}
+    record RemoveAvatar(long sessionId) implements SocialRequest {}
 
 }

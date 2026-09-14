@@ -1,9 +1,8 @@
 package com.faforever.server.game;
 
 
-import com.faforever.server.connection.SessionController;
-import com.faforever.server.message.GPGMessage;
-import com.faforever.server.player.Player;
+import com.faforever.server.message.SessionHandler;
+import com.faforever.server.message.external.GPGMessage;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
@@ -12,7 +11,7 @@ import lombok.extern.jbosslog.JBossLog;
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 class GameConnection {
 
-    private final SessionController sessionController;
+    private final SessionHandler sessionHandler;
 
 
     void sendAndAwait(GPGMessage.Server message) {

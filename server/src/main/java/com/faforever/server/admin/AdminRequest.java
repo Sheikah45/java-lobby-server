@@ -2,9 +2,9 @@ package com.faforever.server.admin;
 
 public sealed interface AdminRequest {
 
-    int requestorId();
+    long requestorSessionId();
 
-    record Broadcast(int requestorId, String message) implements AdminRequest {}
-    record KickPlayer(int requestorId, int playerId) implements AdminRequest {}
-    record ClosePlayerGame(int requestorId, int playerId) implements AdminRequest {}
+    record Broadcast(long requestorSessionId, String message) implements AdminRequest {}
+    record KickPlayer(long requestorSessionId, int playerId) implements AdminRequest {}
+    record ClosePlayerGame(long requestorSessionId, int playerId) implements AdminRequest {}
 }

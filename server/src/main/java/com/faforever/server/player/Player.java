@@ -27,7 +27,7 @@ public class Player {
 
     @Getter
     @Setter(AccessLevel.PACKAGE)
-    private String country = "";
+    private @Nullable String country;
     private @Nullable String clan;
     private @Nullable Avatar avatar;
     private @Nullable Game game;
@@ -35,8 +35,9 @@ public class Player {
     private final Map<Leaderboard, LeaderboardRating> leaderboardRatings = new ConcurrentHashMap<>();
     private final Set<Integer> friendIds = ConcurrentHashMap.newKeySet();
     private final Set<Integer> foeIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> sessionIds = ConcurrentHashMap.newKeySet();
 
-    Player(int id, String username) {
+    public Player(int id, String username) {
         this.id = id;
         this.username = username;
     }
@@ -179,6 +180,18 @@ public class Player {
 
     public Optional<Game> getGame() {
         return Optional.ofNullable(game);
+    }
+
+    void addSession(long sessionId) {
+        sessionIds.add(sessionId);
+    }
+
+    void removeSession(long sessionId) {
+        sessionIds.remove(sessionId);
+    }
+
+    boolean hasNoSession() {
+        return sessionIds.isEmpty();
     }
 
 }

@@ -1,7 +1,7 @@
 package com.faforever.server.endpoint.websocket;
 
-import com.faforever.server.connection.SessionController;
-import com.faforever.server.message.LobbyMessage;
+import com.faforever.server.message.SessionHandler;
+import com.faforever.server.message.external.LobbyMessage;
 import io.quarkus.websockets.next.OnClose;
 import io.quarkus.websockets.next.OnError;
 import io.quarkus.websockets.next.OnOpen;
@@ -14,28 +14,30 @@ import jakarta.enterprise.context.SessionScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 
+import java.io.Serializable;
+
 @JBossLog
 @RequiredArgsConstructor
 @WebSocket(path = "/")
 @SessionScoped
 @RunOnVirtualThread
-public class LobbyWebSocket {
+public class LobbyWebSocket implements Serializable {
 
-    private final SessionController sessionController;
+    private final SessionHandler sessionHandler;
 
     @OnOpen
     public void onOpen(WebSocketConnection connection) {
-        sessionController.setConnection(new LobbyJsonWebsocketConnection(connection));
+        sessionHandler.setConnection(new LobbyJsonWebsocketConnection(connection));
     }
 
     @OnClose
     public void onClose(WebSocketConnection connection) {
-        sessionController.clearConnection();
+        sessionHandler.clearConnection();
     }
 
     @OnTextMessage
     public void onTextMessage(LobbyMessage.Client message) {
-        sessionController.handleMessage(message);
+        sessionHandler.handleMessage(message);
     }
 
     @OnError

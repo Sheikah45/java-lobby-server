@@ -1,6 +1,8 @@
 package com.faforever.server.game;
 
-import com.faforever.server.message.GPGMessage;
+import com.faforever.server.message.external.GPGMessage;
+import com.faforever.server.player.Player;
+import com.faforever.server.player.PlayerService;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
@@ -11,32 +13,45 @@ import lombok.extern.jbosslog.JBossLog;
 public class GPGService {
 
     private final GameService gameService;
+    private final PlayerService playerService;
 
-    public void handleClientMessage(int gameId, int sourcePlayerId, GPGMessage.Client message) {
-        Game game = gameService.getGame(gameId);
-        boolean isHost = game.getDetails().host().getId() == sourcePlayerId;
+    public void handleClientMessage(long sessionId, GPGMessage.Client message) {
+        Game game = gameService.getSessionGame(sessionId);
+        Player player = playerService.getSessionPlayer(sessionId);
+        boolean isHost = game.getHost().equals(player);
         switch (message) {
-            case GPGMessage.AIOption aiOption when isHost -> game.addAiOption(
-                    aiOption.aiName(),
-                    aiOption.optionKey(),
-                    aiOption.optionValue()
-            );
+            case GPGMessage.AIOption aiOption when isHost -> {
+                game.addAiOption(
+                        aiOption.aiName(),
+                        aiOption.optionKey(),
+                        aiOption.optionValue()
+                );
+                gameService.markDirty(game);
+
+            }
             case GPGMessage.ClearSlot clearSlot when isHost -> {
                 int slot = Integer.parseInt(clearSlot.args().getFirst().toString());
                 //        game.clearSlot(slot);
             }
-            case GPGMessage.EnforceRating _ when isHost -> game.setEnforceRatingRange(true);
+            case GPGMessage.EnforceRating _ when isHost -> {
+                game.setEnforceRatingRange(true);
+                gameService.markDirty(game);
+            }
             case GPGMessage.PlayerOption playerOption when isHost -> {
                 int playerId = Integer.parseInt(playerOption.args().getFirst().toString());
                 String key = playerOption.args().get(1).toString();
                 Object value = playerOption.args().get(2);
 
                 game.addPlayerOption(playerId, key, value);
+                gameService.markDirty(game);
             }
-            case GPGMessage.GameOption gameOption when isHost -> game.addOption(
-                    gameOption.args().get(0).toString(),
-                    gameOption.args().get(1)
-            );
+            case GPGMessage.GameOption gameOption when isHost -> {
+                game.addOption(
+                        gameOption.args().get(0).toString(),
+                        gameOption.args().get(1)
+                );
+                gameService.markDirty(game);
+            }
             case GPGMessage.GameMods gameMods when isHost -> {
                 String mode = gameMods.args().getFirst().toString();
                 if ("activated".equals(mode)) {
@@ -85,6 +100,7 @@ public class GPGService {
                     case "Lobby" -> {
                         if (isHost) {
                             game.markHosted();
+                            gameService.markDirty(game);
                         }
                     }
                     case "Launching" -> {
@@ -94,7 +110,7 @@ public class GPGService {
                         LOG.infof("Launching game %s", game);
                     }
                     case "Ended" -> {
-                        game.removeGameConnection(sourcePlayerId);
+
                     }
                 }
             }

@@ -1,19 +1,15 @@
 package com.faforever.server.player;
 
-import com.faforever.server.broadcast.BroadcastService;
-import com.faforever.server.connection.SessionController;
-import com.faforever.server.connection.SessionControllerTestUtils;
-import com.faforever.server.connection.TestLobbyConnection;
 import com.faforever.server.domain.FriendOrFoeEntity;
 import com.faforever.server.mapstruct.OptionalMapperImpl;
-import com.faforever.server.message.AdminMessage;
-import com.faforever.server.message.ConnectionMessage;
-import com.faforever.server.message.LobbyMessage;
-import com.faforever.server.message.SocialMessage;
-import com.faforever.server.message.dto.AvatarInfo;
-import com.faforever.server.message.dto.DtoMapperImpl;
-import com.faforever.server.message.dto.LeaderboardStats;
-import com.faforever.server.message.dto.PlayerInfo;
+import com.faforever.server.message.MessageEmitter;
+import com.faforever.server.message.external.ConnectionMessage;
+import com.faforever.server.message.external.SocialMessage;
+import com.faforever.server.message.external.dto.AvatarInfo;
+import com.faforever.server.message.external.dto.DtoMapperImpl;
+import com.faforever.server.message.external.dto.LeaderboardStats;
+import com.faforever.server.message.external.dto.PlayerInfo;
+import com.faforever.server.message.internal.MessageRequest;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
 import io.quarkus.test.InjectMock;
@@ -22,6 +18,7 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -38,6 +35,9 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentCaptor.captor;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -46,20 +46,18 @@ import static org.mockito.Mockito.when;
 class PlayerServiceTest {
 
     private static final int PLAYER_ID = 1;
+    private static final long SESSION_ID = 0;
     private static final PlayerInfo PLAYER_INFO = new PlayerInfo(PLAYER_ID, "test", "TEST",
             new AvatarInfo("temp", "temporary"), "",
-            Map.of("leaderboard", new LeaderboardStats(1, new LeaderboardStats.Rating(1000, 100))),
-            null);
+            Map.of("leaderboard", new LeaderboardStats(1, new LeaderboardStats.Rating(1000, 100))), null);
     private static final Avatar AVATAR = new Avatar("temp", "temporary");
 
     @Inject
     PlayerService playerService;
-    @Inject
-    SessionController sessionController;
+
 
     @InjectMock
-    private BroadcastService broadcastService;
-
+    private MessageEmitter messageEmitter;
     @InjectMock
     private PlayerRepository playerRepository;
     @InjectMock
@@ -68,15 +66,12 @@ class PlayerServiceTest {
     private AssignedAvatarRepository assignedAvatarRepository;
 
     private final Player player = new Player(PLAYER_ID, "test");
-    private final TestLobbyConnection testConnection = new TestLobbyConnection();
 
     @BeforeEach
     void setup() {
         player.setClan("TEST");
         player.setAvatar(AVATAR);
         player.setLeaderboardRatings(List.of(new LeaderboardRating(new Leaderboard("leaderboard"), 1, 1000, 100)));
-
-        sessionController.setConnection(testConnection);
 
         when(playerRepository.loadPlayer(PLAYER_ID)).thenReturn(player);
     }
@@ -86,41 +81,49 @@ class PlayerServiceTest {
 
         @Test
         void testRegisterSession() {
-            SessionControllerTestUtils.setSessionPlayer(sessionController, PLAYER_ID);
+            playerService.registerSessionForPlayer(SESSION_ID, PLAYER_ID);
 
-            playerService.registerSession(sessionController);
-
-            assertThat(playerService.getOnlinePlayer(PLAYER_ID), equalTo(player));
+            assertThat(playerService.getSessionPlayer(SESSION_ID), equalTo(player));
             assertThat(playerService.getDirtyPlayers(), contains(player));
 
-            List<LobbyMessage.Server> sentMessages = testConnection.getSentMessages();
-            assertThat(sentMessages, hasSize(3));
+            ArgumentCaptor<MessageRequest> messageRequestCaptor = captor();
+            verify(messageEmitter, times(3)).send(messageRequestCaptor.capture());
 
-            LobbyMessage.Server firstMessage = sentMessages.getFirst();
-            assertThat(firstMessage, isA(ConnectionMessage.LoginSuccessResponse.class));
-            ConnectionMessage.LoginSuccessResponse loginSuccessResponse = (ConnectionMessage.LoginSuccessResponse) firstMessage;
+            List<MessageRequest> sentMessages = messageRequestCaptor.getAllValues();
+
+            MessageRequest firstMessage = sentMessages.getFirst();
+            assertThat(firstMessage, isA(MessageRequest.ForSession.class));
+
+            MessageRequest.ForSession firstSessionMessage = (MessageRequest.ForSession) firstMessage;
+            assertThat(firstSessionMessage.sessionId(), equalTo(SESSION_ID));
+            assertThat(firstSessionMessage.message(), isA(ConnectionMessage.LoginSuccessResponse.class));
+
+            ConnectionMessage.LoginSuccessResponse loginSuccessResponse = (ConnectionMessage.LoginSuccessResponse) firstSessionMessage.message();
             assertThat(loginSuccessResponse.currentTime(), lessThanOrEqualTo(OffsetDateTime.now()));
-            assertThat(loginSuccessResponse.me(),
-                    equalTo(PLAYER_INFO));
+            assertThat(loginSuccessResponse.me(), equalTo(PLAYER_INFO));
 
-            LobbyMessage.Server secondMessage = sentMessages.get(1);
-            assertThat(secondMessage, equalTo(new SocialMessage.SocialInfo(Set.of("#TEST_clan"), Set.of(), Set.of())));
+            MessageRequest secondMessage = sentMessages.get(1);
+            assertThat(secondMessage, isA(MessageRequest.ForSession.class));
 
-            LobbyMessage.Server thirdMessage = sentMessages.getLast();
-            assertThat(thirdMessage, isA(SocialMessage.PlayerInfoList.class));
-        }
+            MessageRequest.ForSession secondSessionMessage = (MessageRequest.ForSession) secondMessage;
+            assertThat(secondSessionMessage.sessionId(), equalTo(SESSION_ID));
+            assertThat(secondSessionMessage.message(),
+                    equalTo(new SocialMessage.SocialInfo(Set.of("#TEST_clan"), Set.of(), Set.of())));
 
-        @Test
-        void testKickOfflinePlayer() {
-            playerService.kickPlayer(PLAYER_ID);
+            MessageRequest thirdMessage = sentMessages.getLast();
+            assertThat(thirdMessage, isA(MessageRequest.ForSession.class));
 
-            assertFalse(testConnection.closed());
+            MessageRequest.ForSession thirdSessionMessage = (MessageRequest.ForSession) thirdMessage;
+            assertThat(thirdSessionMessage.sessionId(), equalTo(SESSION_ID));
+            assertThat(thirdSessionMessage.message(), isA(SocialMessage.PlayerInfoList.class));
         }
 
         @Test
         void testChangeSocialRelationshiipOffliinePlayer() {
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Add(PLAYER_ID, 2, SocialRequest.FriendOrFoe.Status.FRIEND));
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Add(PLAYER_ID, 3, SocialRequest.FriendOrFoe.Status.FOE));
+            playerService.changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, 2, SocialRequest.FriendOrFoe.Status.FRIEND));
+            playerService.changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, 3, SocialRequest.FriendOrFoe.Status.FOE));
             playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(PLAYER_ID, 4));
 
             assertThat(player.getFriendIds(), hasSize(0));
@@ -164,7 +167,7 @@ class PlayerServiceTest {
         void testNoActionWhenNoDirty() {
             assertThat(playerService.getDirtyPlayers(), hasSize(0));
             playerService.sendUpdateForDirtyPlayers();
-            verifyNoInteractions(broadcastService);
+            verifyNoInteractions(messageEmitter);
         }
 
         @Test
@@ -181,15 +184,20 @@ class PlayerServiceTest {
 
         @BeforeEach
         void setup() {
-            SessionControllerTestUtils.setSessionPlayer(sessionController, PLAYER_ID);
-            playerService.registerSession(sessionController);
+            playerService.registerSessionForPlayer(SESSION_ID, PLAYER_ID);
             playerService.getDirtyPlayers().clear();
-            testConnection.reset();
+            clearInvocations(messageEmitter);
+        }
+
+        @Test
+        void testDoubleRegistrationThrows() {
+            when(playerRepository.loadPlayer(2)).thenReturn(new Player(2, "test"));
+            assertThrows(IllegalStateException.class, () -> playerService.registerSessionForPlayer(SESSION_ID, 2));
         }
 
         @Test
         void testUnregisterSession() {
-            playerService.unregisterSession(sessionController);
+            playerService.unregisterSession(SESSION_ID);
 
             assertThat(playerService.getDisconnectedPlayers(), contains(player));
         }
@@ -199,13 +207,12 @@ class PlayerServiceTest {
             int otherId = 2;
             assertFalse(player.isFriend(otherId));
             playerService.changeSocialRelationship(
-                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
 
-            verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId,
-                    FriendOrFoeEntity.Status.FRIEND);
+            verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FRIEND);
             assertTrue(player.isFriend(otherId));
 
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(PLAYER_ID, otherId));
+            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(SESSION_ID, otherId));
 
             verify(friendOrFoeRepository).deletePlayerRelationship(PLAYER_ID, otherId);
             assertFalse(player.isFriend(otherId));
@@ -216,12 +223,12 @@ class PlayerServiceTest {
             int otherId = 2;
             assertFalse(player.isFoe(otherId));
             playerService.changeSocialRelationship(
-                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
 
             verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FOE);
             assertTrue(player.isFoe(otherId));
 
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(PLAYER_ID, otherId));
+            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Remove(SESSION_ID, otherId));
 
             verify(friendOrFoeRepository).deletePlayerRelationship(PLAYER_ID, otherId);
             assertFalse(player.isFoe(otherId));
@@ -231,11 +238,12 @@ class PlayerServiceTest {
         void testFriendToFoe() {
             int otherId = 2;
             playerService.changeSocialRelationship(
-                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
             assertTrue(player.isFriend(otherId));
             assertFalse(player.isFoe(otherId));
 
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
+            playerService.changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
 
             verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FOE);
             assertTrue(player.isFoe(otherId));
@@ -246,11 +254,12 @@ class PlayerServiceTest {
         void testFoeToFriend() {
             int otherId = 2;
             playerService.changeSocialRelationship(
-                    new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FOE));
             assertTrue(player.isFoe(otherId));
             assertFalse(player.isFriend(otherId));
 
-            playerService.changeSocialRelationship(new SocialRequest.FriendOrFoe.Add(PLAYER_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
+            playerService.changeSocialRelationship(
+                    new SocialRequest.FriendOrFoe.Add(SESSION_ID, otherId, SocialRequest.FriendOrFoe.Status.FRIEND));
 
             verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FRIEND);
             assertTrue(player.isFriend(otherId));
@@ -258,11 +267,13 @@ class PlayerServiceTest {
         }
 
         @Test
-        void testGetAvatars() {
-            Avatar avatar = AVATAR;
-            when(assignedAvatarRepository.findAssignedAvatarsByPlayer(PLAYER_ID)).thenReturn(Set.of(avatar));
+        void testSendAvatars() {
+            when(assignedAvatarRepository.findAssignedAvatarsByPlayer(PLAYER_ID)).thenReturn(Set.of(AVATAR));
 
-            assertThat(playerService.getAvatars(new SocialRequest.Avatars(PLAYER_ID)), contains(avatar));
+            playerService.sendAvatars(new SocialRequest.Avatars(SESSION_ID));
+
+            verify(messageEmitter).send(new MessageRequest.ForSession(SESSION_ID,
+                    new SocialMessage.AvatarInfoList(List.of(new AvatarInfo(AVATAR.url(), AVATAR.description())))));
         }
 
         @Test
@@ -271,7 +282,7 @@ class PlayerServiceTest {
 
             when(assignedAvatarRepository.updateSelectedAvatar(PLAYER_ID, "new")).thenReturn(avatar);
 
-            playerService.selectAvatar(new SocialRequest.SelectAvatar(PLAYER_ID, avatar.url()));
+            playerService.selectAvatar(new SocialRequest.SelectAvatar(SESSION_ID, avatar.url()));
 
             assertThat(player.getAvatar().orElseThrow(), equalTo(avatar));
             assertThat(playerService.getDirtyPlayers(), contains(player));
@@ -279,7 +290,7 @@ class PlayerServiceTest {
 
         @Test
         void testSelectAvatarAlreadySelected() {
-            playerService.selectAvatar(new SocialRequest.SelectAvatar(PLAYER_ID, AVATAR.url()));
+            playerService.selectAvatar(new SocialRequest.SelectAvatar(SESSION_ID, AVATAR.url()));
 
             verifyNoInteractions(assignedAvatarRepository);
             assertThat(player.getAvatar().orElseThrow(), equalTo(AVATAR));
@@ -288,7 +299,7 @@ class PlayerServiceTest {
 
         @Test
         void testRemoveAvatar() {
-            playerService.removeAvatar(new SocialRequest.RemoveAvatar(PLAYER_ID));
+            playerService.removeAvatar(new SocialRequest.RemoveAvatar(SESSION_ID));
 
             verify(assignedAvatarRepository).removeSelectedAvatar(PLAYER_ID);
             assertThat(player.getAvatar(), equalTo(Optional.empty()));
@@ -298,22 +309,11 @@ class PlayerServiceTest {
         @Test
         void testRemoveAvatarNoAvatarSelected() {
             player.clearAvatar();
-            playerService.removeAvatar(new SocialRequest.RemoveAvatar(PLAYER_ID));
+            playerService.removeAvatar(new SocialRequest.RemoveAvatar(SESSION_ID));
 
             verifyNoInteractions(assignedAvatarRepository);
             assertThat(player.getAvatar(), equalTo(Optional.empty()));
             assertThat(playerService.getDirtyPlayers(), hasSize(0));
-        }
-
-        @Test
-        void testKickPlayer() {
-            playerService.kickPlayer(PLAYER_ID);
-
-            List<LobbyMessage.Server> sentMessages = testConnection.getSentMessages();
-            assertThat(sentMessages, hasSize(1));
-
-            LobbyMessage.Server firstMessage = sentMessages.getFirst();
-            assertThat(firstMessage, equalTo(new AdminMessage.NoticeInfo(null, AdminMessage.Style.KICK)));
         }
 
         @Test
@@ -323,7 +323,8 @@ class PlayerServiceTest {
 
             playerService.sendUpdateForDirtyPlayers();
 
-            verify(broadcastService).broadcast(new SocialMessage.PlayerInfoList(Set.of(PLAYER_INFO)));
+            verify(messageEmitter).send(
+                    new MessageRequest.ForSession(SESSION_ID, new SocialMessage.PlayerInfoList(Set.of(PLAYER_INFO))));
             assertThat(playerService.getDirtyPlayers(), hasSize(0));
         }
 
@@ -336,7 +337,7 @@ class PlayerServiceTest {
 
             assertThat(playerService.getDisconnectedPlayers(), hasSize(0));
             assertThat(playerService.getDirtyPlayers(), contains(player));
-            assertThrows(IllegalArgumentException.class, () -> playerService.getOnlinePlayer(PLAYER_ID));
+            assertThrows(IllegalArgumentException.class, () -> playerService.getSessionPlayer(PLAYER_ID));
         }
     }
 }
