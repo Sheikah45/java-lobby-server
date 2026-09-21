@@ -26,6 +26,7 @@ public sealed interface LobbyMessage permits GPGMessage, LobbyMessage.Client, Lo
                     @JsonSubTypes.Type(value = MatchmakerMessage.MatchmakerInfo.class, name = "matchmaker_info"),
                     @JsonSubTypes.Type(value = GameMessage.GameInfoList.class, name = "game_info"),
                     @JsonSubTypes.Type(value = GameMessage.GameLaunchResponse.class, name = "game_launch"),
+                    @JsonSubTypes.Type(value = GameMessage.GameJoinFailed.class, name = "game_join_failed"),
                     @JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = "notice"),
                     @JsonSubTypes.Type(value = GPGMessage.HostGame.class, name = "HostGame")
 
@@ -59,8 +60,10 @@ public sealed interface LobbyMessage permits GPGMessage, LobbyMessage.Client, Lo
                     @JsonSubTypes.Type(value = GameMessage.RestoreGameSessionRequest.class, name = "restore_game_session"),
             }
     )
-    sealed interface Client extends LobbyMessage permits AdminMessage.Client, ConnectionMessage.Client, GPGMessage.Client, GameMessage.Client, MatchmakerMessage.Client, SocialMessage.Client {}
+    sealed interface Client extends LobbyMessage permits ConnectionMessage.Client, Authenticated {}
 
     sealed interface Broadcast extends Server permits AdminMessage.NoticeInfo, ConnectionMessage.Ping, GameMessage.GameInfoList, MatchmakerMessage.MatchmakerInfo, SocialMessage.PlayerInfoList {}
+
+    sealed interface Authenticated extends Client permits AdminMessage.Client, GPGMessage.Client, GameMessage.Client, MatchmakerMessage.Client, SocialMessage.Client {}
 
 }

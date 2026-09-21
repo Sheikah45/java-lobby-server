@@ -13,13 +13,19 @@ import java.util.Map;
 
 public sealed interface GameMessage {
 
-    sealed interface Client extends GameMessage, LobbyMessage.Client {}
+    sealed interface Client extends GameMessage, LobbyMessage.Authenticated {}
 
     sealed interface Server extends GameMessage, LobbyMessage.Server {}
 
     record GameInfoList(
             List<GameInfo> games
     ) implements Server, LobbyMessage.Broadcast {}
+
+    record GameJoinFailed(
+            String reason,
+            @JsonProperty("uid")
+            int gameId
+    ) implements Server {}
 
     record GameLaunchResponse(
             @JsonProperty("uid") int gameId,
@@ -48,7 +54,7 @@ public sealed interface GameMessage {
             String title,
             @JsonProperty("mod") @Nullable String featuredMod,
             GameAccess access,
-            String password,
+            @Nullable String password,
             GameVisibility visibility,
             @Nullable Integer ratingMin,
             @Nullable Integer ratingMax,

@@ -38,9 +38,4 @@ public sealed interface ConnectionMessage {
             @Nullable String text
     ) implements Server {}
 
-    record NoticeInfo(
-            @Nullable String style,
-            @Nullable String text
-    ) implements Server {}
-
 }

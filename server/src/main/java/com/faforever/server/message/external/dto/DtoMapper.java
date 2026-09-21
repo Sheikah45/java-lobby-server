@@ -1,6 +1,6 @@
 package com.faforever.server.message.external.dto;
 
-import com.faforever.server.config.DefaultMapperConfig;
+import com.faforever.server.mapstruct.DefaultMapperConfig;
 import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.game.Game;
 import com.faforever.server.mapstruct.OptionalMapper;

@@ -11,7 +11,7 @@ public sealed interface AdminMessage {
 
     sealed interface Server extends AdminMessage, LobbyMessage.Server {}
 
-    sealed interface Client extends AdminMessage, LobbyMessage.Client {}
+    sealed interface Client extends AdminMessage, LobbyMessage.Authenticated {}
 
     enum Action {
         @JsonProperty("broadcast") BROADCAST, @JsonProperty("closeFA") CLOSE_GAME, @JsonProperty("closelobby") CLOSE_LOBBY

@@ -1,6 +1,5 @@
-package com.faforever.server.config;
+package com.faforever.server.mapstruct;
 
-import com.faforever.server.mapstruct.OptionalMapper;
 import org.mapstruct.CollectionMappingStrategy;
 import org.mapstruct.InjectionStrategy;
 import org.mapstruct.MapperConfig;

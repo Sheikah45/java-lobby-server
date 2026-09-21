@@ -19,6 +19,12 @@ quarkus:
     port: 8003
     host-validation:
       allowed-hosts: ${ALLOWED_HOST:ws.faforever.localhost}
+  rest-client:
+    policy-server:
+      url: ${POLICY_SERVER_URL:http://localhost:8097}
+
+faf:
+  use-policy-server: ${USE_POLICY_SERVER:false}
 
 mp:
   jwt:

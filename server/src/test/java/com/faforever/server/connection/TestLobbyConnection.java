@@ -1,5 +1,6 @@
 package com.faforever.server.connection;
 
+import com.faforever.server.endpoint.connection.LobbyConnection;
 import com.faforever.server.message.external.LobbyMessage;
 
 import java.util.ArrayList;

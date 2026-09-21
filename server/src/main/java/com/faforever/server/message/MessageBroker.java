@@ -1,13 +1,23 @@
 package com.faforever.server.message;
 
+import com.faforever.server.game.GPGService;
+import com.faforever.server.game.GameService;
+import com.faforever.server.matchmaker.MatchmakerService;
 import com.faforever.server.message.external.AdminMessage;
+import com.faforever.server.message.external.GPGMessage;
+import com.faforever.server.message.external.GameMessage;
 import com.faforever.server.message.external.LobbyMessage;
-import com.faforever.server.message.internal.MessageRequest;
+import com.faforever.server.message.external.MatchmakerMessage;
+import com.faforever.server.message.external.SocialMessage;
+import com.faforever.server.message.internal.InboundLobbyMessage;
+import com.faforever.server.message.internal.OutboundLobbyMessage;
+import com.faforever.server.message.internal.OutboundTarget;
+import com.faforever.server.player.AdminService;
+import com.faforever.server.player.PlayerService;
 import com.faforever.server.utils.NoThrowCloseable;
-import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.ApplicationScoped;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
-import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.MDC;
 
 import java.util.Map;
@@ -16,90 +26,105 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @JBossLog
 @ApplicationScoped
-class MessageBroker {
+@RequiredArgsConstructor
+public class MessageBroker {
 
-    private final Map<Long, SessionHandler> sessionControllerMap = new ConcurrentHashMap<>();
-    private final Map<Integer, Set<SessionHandler>> playerControllerMap = new ConcurrentHashMap<>();
+    private final AdminService adminService;
+    private final MatchmakerService matchmakerService;
+    private final GameService gameService;
+    private final PlayerService playerService;
+    private final GPGService gpgService;
 
-    @RunOnVirtualThread
-    @Incoming(value = "client-outbound")
-    public void processMessageRequest(MessageRequest messageRequest) {
-        try (NoThrowCloseable _ = populateMDC(messageRequest)) {
-            switch (messageRequest) {
-                case MessageRequest.ForSession(long sessionId, LobbyMessage.Server message) -> sendMessageForSession(sessionId, message);
-                case MessageRequest.ForPlayer(int playerId, LobbyMessage.Server message) -> sendMessageForPlayer(playerId, message);
-                case MessageRequest.KickPlayer(int playerId) -> kickPlayer(playerId);
+    private final Map<Long, SessionHandler> sessionHandlerMap = new ConcurrentHashMap<>();
+    private final Map<Integer, Set<Long>> playerSessionMap = new ConcurrentHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public void handleInboundMessage(InboundLobbyMessage<?> inboundLobbyMessage) {
+        switch (inboundLobbyMessage.message()) {
+            case SocialMessage.Client _ ->
+                    playerService.handleRequest((InboundLobbyMessage<SocialMessage.Client>) inboundLobbyMessage);
+            case AdminMessage.Client _ ->
+                    adminService.handleRequest((InboundLobbyMessage<AdminMessage.Client>) inboundLobbyMessage);
+            case MatchmakerMessage.Client _ -> matchmakerService.handleRequest(
+                    (InboundLobbyMessage<MatchmakerMessage.Client>) inboundLobbyMessage);
+            case GameMessage.Client _ ->
+                    gameService.handleRequest((InboundLobbyMessage<GameMessage.Client>) inboundLobbyMessage);
+            case GPGMessage.Client _ ->
+                    gpgService.handleRequest((InboundLobbyMessage<GPGMessage.Client>) inboundLobbyMessage);
+        }
+    }
+
+    public void handleOutboundMessage(OutboundLobbyMessage<?> outboundLobbyMessage) {
+        try (NoThrowCloseable _ = populateMDC(outboundLobbyMessage)) {
+            LobbyMessage.Server message = outboundLobbyMessage.message();
+            switch (outboundLobbyMessage.target()) {
+                case OutboundTarget.Session(long sessionId) -> sendMessageToSession(sessionId, message);
+                case OutboundTarget.Player(int playerId) -> sendMessageToPlayer(playerId, message);
+                case OutboundTarget.All() -> sendMessageToAll(message);
             }
         }
     }
 
-    private void kickPlayer(int playerId) {
-        Set<SessionHandler> playerSessionHandlers = playerControllerMap.getOrDefault(playerId,
-                Set.of());
-        if (playerSessionHandlers.isEmpty()) {
-            LOG.warn("No active sessions for player");
-            return;
-        }
-
-        playerSessionHandlers.forEach(sessionController -> {
-            sessionController.sendMessage(new AdminMessage.NoticeInfo(null, AdminMessage.Style.KICK));
-            sessionController.close();
-        });
+    private void sendMessageToAll(LobbyMessage.Server message) {
+        sessionHandlerMap.keySet().forEach(sessionId -> sendMessageToSession(sessionId, message));
     }
 
-    private void sendMessageForPlayer(int playerId, LobbyMessage.Server message) {
-        Set<SessionHandler> playerSessionHandlers = playerControllerMap.getOrDefault(playerId,
-                Set.of());
-        if (playerSessionHandlers.isEmpty()) {
-            LOG.warn("No active sessions for player");
-            return;
-        }
-
-        playerSessionHandlers.forEach(sessionController -> sessionController.sendMessage(message));
-    }
-
-    private void sendMessageForSession(long sessionId, LobbyMessage.Server message) {
-        SessionHandler sessionHandler = sessionControllerMap.get(sessionId);
+    private void sendMessageToSession(long sessionId, LobbyMessage.Server message) {
+        SessionHandler sessionHandler = sessionHandlerMap.get(sessionId);
         if (sessionHandler == null) {
             LOG.warn("No active session for session id");
             return;
         }
 
         sessionHandler.sendMessage(message);
+        if (message instanceof AdminMessage.NoticeInfo(
+                _, AdminMessage.Style style
+        ) && style == AdminMessage.Style.KICK) {
+            sessionHandler.close();
+        }
+    }
+
+    private void sendMessageToPlayer(int playerId, LobbyMessage.Server message) {
+        Set<Long> playerSessions = playerSessionMap.getOrDefault(playerId, Set.of());
+        if (playerSessions.isEmpty()) {
+            LOG.warn("No active sessions for player");
+            return;
+        }
+
+        playerSessions.forEach(sessionId -> sendMessageToSession(sessionId, message));
     }
 
     void registerSession(SessionHandler sessionHandler) {
         long sessionId = sessionHandler.sessionId();
-        SessionHandler mappedSessionHandler = sessionControllerMap.putIfAbsent(sessionId,
-                sessionHandler);
-        if (mappedSessionHandler != sessionHandler) {
+        SessionHandler mappedSessionHandler = sessionHandlerMap.putIfAbsent(sessionId, sessionHandler);
+        if (mappedSessionHandler != null && mappedSessionHandler != sessionHandler) {
             throw new IllegalStateException("Existing session for id %d".formatted(sessionId));
         }
 
         int playerId = sessionHandler.playerId();
-        playerControllerMap.computeIfAbsent(playerId,  _ -> ConcurrentHashMap.newKeySet()).add(sessionHandler);
+        playerSessionMap.computeIfAbsent(playerId, _ -> ConcurrentHashMap.newKeySet()).add(sessionId);
     }
 
-    public void unregisterSession(SessionHandler sessionHandler) {
-        if (!sessionControllerMap.remove(sessionHandler.sessionId(), sessionHandler)) {
+    void unregisterSession(SessionHandler sessionHandler) {
+        if (!sessionHandlerMap.remove(sessionHandler.sessionId(), sessionHandler)) {
             LOG.warn("Session controller not associated with session id");
         }
 
-        Set<SessionHandler> sessionHandlers = playerControllerMap.getOrDefault(sessionHandler.playerId(), Set.of());
-        if (!sessionHandlers.remove(sessionHandler)) {
+        Set<Long> sessions = playerSessionMap.getOrDefault(sessionHandler.playerId(), Set.of());
+        if (!sessions.remove(sessionHandler.sessionId())) {
             LOG.warn("Session controller not associated with player");
         }
 
-        if (sessionHandlers.isEmpty()) {
-            playerControllerMap.remove(sessionHandler.playerId(), sessionHandlers);
+        if (sessions.isEmpty()) {
+            playerSessionMap.remove(sessionHandler.playerId(), sessions);
         }
     }
 
-    private NoThrowCloseable populateMDC(MessageRequest messageRequest) {
-        switch (messageRequest) {
-            case MessageRequest.KickPlayer(int playerId) -> MDC.put("playerId", playerId);
-            case MessageRequest.ForPlayer(int playerId, _) -> MDC.put("playerId", playerId);
-            case MessageRequest.ForSession(long sessionId, _) -> MDC.put("sessionId", sessionId);
+    private NoThrowCloseable populateMDC(OutboundLobbyMessage<?> outboundLobbyMessage) {
+        switch (outboundLobbyMessage.target()) {
+            case OutboundTarget.Player(int playerId) -> MDC.put("playerId", playerId);
+            case OutboundTarget.Session(long sessionId) -> MDC.put("sessionId", sessionId);
+            case OutboundTarget.All() -> {}
         }
 
         return () -> {

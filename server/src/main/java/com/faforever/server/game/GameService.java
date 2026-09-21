@@ -1,10 +1,13 @@
 package com.faforever.server.game;
 
 import com.faforever.server.exception.ClientException;
+import com.faforever.server.message.MessageBroker;
 import com.faforever.server.message.external.GameMessage;
 import com.faforever.server.message.external.dto.DtoMapper;
 import com.faforever.server.message.external.dto.GameType;
 import com.faforever.server.message.external.dto.GameVisibility;
+import com.faforever.server.message.internal.InboundLobbyMessage;
+import com.faforever.server.message.internal.OutboundLobbyMessage;
 import com.faforever.server.player.Player;
 import com.faforever.server.player.PlayerService;
 import com.faforever.server.rating.LeaderboardRating;
@@ -12,6 +15,8 @@ import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import lombok.AccessLevel;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 
@@ -29,6 +34,8 @@ public class GameService {
 
     private final PlayerService playerService;
 
+    private final MessageBroker messageBroker;
+
     private final GameRepository gameRepository;
 
     private final DtoMapper dtoMapper;
@@ -36,6 +43,7 @@ public class GameService {
     private final Map<Long, Game> sessionGameMap = new ConcurrentHashMap<>();
     private final Map<Integer, Game> gameIdMap = new ConcurrentHashMap<>();
 
+    @Getter(AccessLevel.PACKAGE)
     private final Set<Game> dirtyGames = ConcurrentHashMap.newKeySet();
 
     private final AtomicInteger gameCounter = new AtomicInteger();
@@ -45,20 +53,30 @@ public class GameService {
         gameCounter.set(gameRepository.findMaxGameId());
     }
 
-    public void closePlayerGame(int playerId) {
-
+    public void handleRequest(InboundLobbyMessage<GameMessage.Client> request) {
+        long sessionId = request.sessionId();
+        switch (request.message()) {
+            case GameMessage.HostGameRequest hostGameRequest -> hostGame(sessionId, hostGameRequest);
+            case GameMessage.JoinGameRequest joinGameRequest -> joinGame(sessionId, joinGameRequest);
+            case GameMessage.RestoreGameSessionRequest restoreGameSessionRequest -> restoreGameSession(sessionId, restoreGameSessionRequest);
+        }
     }
 
     public Game getSessionGame(long sessionId) {
-        Game game = sessionGameMap.get(sessionId);
-        if (game == null) {
-            throw new IllegalArgumentException("Session id %d not associated with a game");
-        }
-        return game;
+        return playerService.getSessionPlayer(sessionId)
+                            .getGame()
+                            .orElseThrow(() -> new IllegalStateException("session not associated with a game"));
     }
 
-    public Game hostGame(long sessionId, GameMessage.HostGameRequest hostMessage) {
-        Player host = playerService.getSessionPlayer(sessionId);
+    public void sendGamesToSession(long sessionId) {
+        Player player = playerService.getSessionPlayer(sessionId);
+        Set<Game> games = Set.copyOf(gameIdMap.values());
+        GameMessage.GameInfoList gameInfoMessage = createFilteredGameInfoMessage(games, player);
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, gameInfoMessage));
+    }
+
+    private void hostGame(long sessionId, GameMessage.HostGameRequest hostMessage) {
+        Player player = playerService.getSessionPlayer(sessionId);
 
         String title = hostMessage.title();
         if (title.isBlank()) {
@@ -86,15 +104,68 @@ public class GameService {
 
         int gameId = gameCounter.incrementAndGet();
 
-        Game game = new Game(gameId, visibility, hostMessage.password(), "global", GameType.CUSTOM, featuredMod, host,
+        Game game = new Game(gameId, visibility, hostMessage.password(), "global", GameType.CUSTOM, featuredMod, player,
                 title, mapName, ratingMax, ratingMin, enforceRatingRange);
 
-        sessionGameMap.put(sessionId, game);
         gameIdMap.put(gameId, game);
+        player.setGame(game);
+
+        LOG.debug("Launching game");
+        messageBroker.handleOutboundMessage(
+                OutboundLobbyMessage.forSession(sessionId, dtoMapper.mapToGameLaunch(game)));
 
         markDirty(game);
+    }
 
-        return game;
+    private void joinGame(long sessionId, GameMessage.JoinGameRequest joinMessage) {
+        Player player = playerService.getSessionPlayer(sessionId);
+
+        int gameId = joinMessage.gameId();
+        Game game = gameIdMap.get(gameId);
+        if (game == null) {
+            messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, new GameMessage.GameJoinFailed("host_left_game", gameId)));
+            return;
+        }
+
+        if (game.getState() != Game.State.LOBBY) {
+            messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, new GameMessage.GameJoinFailed("game_not_ready", gameId)));
+            return;
+        }
+
+        if (!game.getPassword().map(password -> password.equals(joinMessage.password())).orElse(true)) {
+            messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, new GameMessage.GameJoinFailed("bad_password", gameId)));
+            return;
+        }
+
+        if (!Set.of(GameType.CUSTOM, GameType.COOP).contains(game.getGameType())) {
+            throw new ClientException("Game cannot be joined");
+        }
+
+        if (!isGameVisibleToPlayer(game, player)) {
+            throw new ClientException("You cannot join this game");
+        }
+
+        player.setGame(game);
+
+        messageBroker.handleOutboundMessage(
+                OutboundLobbyMessage.forSession(sessionId, dtoMapper.mapToGameLaunch(game)));
+
+        markDirty(game);
+    }
+
+    private void restoreGameSession(long sessionId, GameMessage.RestoreGameSessionRequest restoreMessage) {
+        Player player = playerService.getSessionPlayer(sessionId);
+        int gameId = restoreMessage.gameId();
+        Game game = gameIdMap.get(gameId);
+        if (game == null) {
+            throw new ClientException("The game you were connected to no longer exists");
+        }
+
+        if (!Set.of(Game.State.LOBBY, Game.State.LIVE).contains(game.getState())) {
+            throw new ClientException("The game you were connected to is no longer available");
+        }
+
+        player.setGame(game);
     }
 
     void markDirty(Game game) {
@@ -110,7 +181,14 @@ public class GameService {
             return;
         }
 
-        playerService.broadcast(player -> createFilteredGameInfoMessage(frozenDirtyGames, player));
+        playerService.getOnlinePlayers().forEach(player -> {
+            GameMessage.GameInfoList filteredGameInfoMessage = createFilteredGameInfoMessage(frozenDirtyGames, player);
+            if (filteredGameInfoMessage.games().isEmpty()) {
+                return;
+            }
+            messageBroker.handleOutboundMessage(
+                    OutboundLobbyMessage.forPlayer(player.getId(), filteredGameInfoMessage));
+        });
 
         dirtyGames.removeAll(frozenDirtyGames);
     }

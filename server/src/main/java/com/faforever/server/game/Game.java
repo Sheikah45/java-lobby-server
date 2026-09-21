@@ -1,18 +1,18 @@
 package com.faforever.server.game;
 
 import com.faforever.server.message.SessionHandler;
-import com.faforever.server.message.external.GPGMessage;
 import com.faforever.server.message.external.dto.GameType;
 import com.faforever.server.message.external.dto.GameVisibility;
 import com.faforever.server.player.Player;
 import com.faforever.server.rating.Leaderboard;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
@@ -22,7 +22,6 @@ public class Game {
     private final int id;
     @Getter
     private final GameVisibility visibility;
-    @Getter
     private final @Nullable String password;
     @Getter
     private final Leaderboard leaderboard;
@@ -59,6 +58,9 @@ public class Game {
     @Getter
     @Setter
     private String mapName;
+    @Getter
+    @Setter(AccessLevel.PACKAGE)
+    private State state = State.INITIALIZING;
 
     public Game(int id, GameVisibility visibility, @Nullable String password, String ratingType, GameType gameType,
                 String featuredMod, Player host, String title, String mapName, @Nullable Integer ratingMax, @Nullable Integer ratingMin,
@@ -89,18 +91,25 @@ public class Game {
     }
 
     void markHosted() {
-        if (hostedAt == null) {
-            hostedAt = OffsetDateTime.now();
-            SessionHandler hostSessionHandler = playerGameConnectionMap.get(host.getId());
-            if (hostSessionHandler == null) {
-                throw new IllegalStateException("Host connection does not exist");
-            }
-            hostSessionHandler.sendMessage(new GPGMessage.HostGame(
-                    List.of(mapName)));
+        if (hostedAt != null) {
+            throw new IllegalStateException("Game already marked as hosted");
         }
+        hostedAt = OffsetDateTime.now();
     }
 
     void incrementDesyncs() {
         desyncs.increment();
+    }
+
+    boolean isHosted() {
+        return hostedAt != null;
+    }
+
+    public Optional<String> getPassword() {
+        return Optional.ofNullable(password);
+    }
+
+    public enum State {
+        INITIALIZING, LOBBY, LIVE, ENDED
     }
 }

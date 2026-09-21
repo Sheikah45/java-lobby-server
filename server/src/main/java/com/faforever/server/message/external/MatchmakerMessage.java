@@ -11,7 +11,7 @@ import java.util.Set;
 
 public sealed interface MatchmakerMessage {
 
-    sealed interface Client extends MatchmakerMessage, LobbyMessage.Client {}
+    sealed interface Client extends MatchmakerMessage, LobbyMessage.Authenticated {}
 
     sealed interface Server extends MatchmakerMessage, LobbyMessage.Server {}
 

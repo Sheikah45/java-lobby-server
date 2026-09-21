@@ -1,11 +1,14 @@
 package com.faforever.server.game;
 
+import com.faforever.server.message.MessageBroker;
 import com.faforever.server.message.external.GPGMessage;
-import com.faforever.server.player.Player;
-import com.faforever.server.player.PlayerService;
+import com.faforever.server.message.internal.InboundLobbyMessage;
+import com.faforever.server.message.internal.OutboundLobbyMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
+
+import java.util.List;
 
 @JBossLog
 @RequiredArgsConstructor
@@ -13,13 +16,15 @@ import lombok.extern.jbosslog.JBossLog;
 public class GPGService {
 
     private final GameService gameService;
-    private final PlayerService playerService;
 
-    public void handleClientMessage(long sessionId, GPGMessage.Client message) {
+    private final MessageBroker messageBroker;
+
+    public void handleRequest(InboundLobbyMessage<GPGMessage.Client> request) {
+        long sessionId = request.sessionId();
+        int playerId = request.playerId();
         Game game = gameService.getSessionGame(sessionId);
-        Player player = playerService.getSessionPlayer(sessionId);
-        boolean isHost = game.getHost().equals(player);
-        switch (message) {
+        boolean isHost = game.getHost().getId() == playerId;
+        switch (request.message()) {
             case GPGMessage.AIOption aiOption when isHost -> {
                 game.addAiOption(
                         aiOption.aiName(),
@@ -38,11 +43,11 @@ public class GPGService {
                 gameService.markDirty(game);
             }
             case GPGMessage.PlayerOption playerOption when isHost -> {
-                int playerId = Integer.parseInt(playerOption.args().getFirst().toString());
+                int optionPlayerId = Integer.parseInt(playerOption.args().getFirst().toString());
                 String key = playerOption.args().get(1).toString();
                 Object value = playerOption.args().get(2);
 
-                game.addPlayerOption(playerId, key, value);
+                game.addPlayerOption(optionPlayerId, key, value);
                 gameService.markDirty(game);
             }
             case GPGMessage.GameOption gameOption when isHost -> {
@@ -98,7 +103,9 @@ public class GPGService {
                     case "Idle" -> {
                     }
                     case "Lobby" -> {
-                        if (isHost) {
+                        if (isHost && !game.isHosted()) {
+                            messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, new GPGMessage.HostGame(
+                                    List.of(game.getMapName()))));
                             game.markHosted();
                             gameService.markDirty(game);
                         }

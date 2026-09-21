@@ -14,7 +14,7 @@ public sealed interface SocialMessage  {
 
     sealed interface Server extends SocialMessage, LobbyMessage.Server {}
 
-    sealed interface Client extends SocialMessage, LobbyMessage.Client {}
+    sealed interface Client extends SocialMessage, LobbyMessage.Authenticated {}
 
     record PlayerInfoList(
             Collection<PlayerInfo> players

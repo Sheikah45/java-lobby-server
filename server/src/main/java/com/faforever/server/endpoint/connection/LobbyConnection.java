@@ -1,4 +1,4 @@
-package com.faforever.server.connection;
+package com.faforever.server.endpoint.connection;
 
 
 import com.faforever.server.message.external.LobbyMessage;

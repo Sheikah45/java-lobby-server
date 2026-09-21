@@ -1,7 +1,6 @@
 package com.faforever.server.mapstruct;
 
 
-import com.faforever.server.config.DefaultMapperConfig;
 import org.jspecify.annotations.Nullable;
 import org.mapstruct.Condition;
 import org.mapstruct.Mapper;

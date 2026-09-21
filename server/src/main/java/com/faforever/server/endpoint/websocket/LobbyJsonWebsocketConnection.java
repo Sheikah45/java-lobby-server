@@ -1,6 +1,6 @@
 package com.faforever.server.endpoint.websocket;
 
-import com.faforever.server.connection.LobbyConnection;
+import com.faforever.server.endpoint.connection.LobbyConnection;
 import com.faforever.server.message.external.LobbyMessage;
 import io.quarkus.websockets.next.WebSocketConnection;
 import lombok.RequiredArgsConstructor;

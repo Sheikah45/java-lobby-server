@@ -8,7 +8,7 @@ public sealed interface GPGMessage extends LobbyMessage {
 
     sealed interface Server extends GPGMessage, LobbyMessage.Server {}
 
-    sealed interface Client extends GPGMessage, LobbyMessage.Client {
+    sealed interface Client extends GPGMessage, Authenticated {
 
         sealed interface HostOnly extends GPGMessage.Client {}
 

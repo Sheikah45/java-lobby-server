@@ -41,14 +41,6 @@ public class PlayerEntity extends AbstractEntity {
     private AvatarEntity selectedAvatar;
 
     @OneToMany
-    @JoinTable(
-            name = "user_group_assignment",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "group_id")
-    )
-    private Set<UserGroupEntity> userGroups = new HashSet<>();
-
-    @OneToMany
     @JoinColumn(name = "user_id")
     private Set<FriendOrFoeEntity> friendOrFoes = new HashSet<>();
 

@@ -1,13 +1,14 @@
 package com.faforever.server.player;
 
 import com.faforever.server.domain.FriendOrFoeEntity;
-import com.faforever.server.message.MessageEmitter;
+import com.faforever.server.game.GameService;
+import com.faforever.server.message.MessageBroker;
 import com.faforever.server.message.external.ConnectionMessage;
-import com.faforever.server.message.external.LobbyMessage;
 import com.faforever.server.message.external.SocialMessage;
 import com.faforever.server.message.external.dto.DtoMapper;
 import com.faforever.server.message.external.dto.PlayerInfo;
-import com.faforever.server.message.internal.MessageRequest;
+import com.faforever.server.message.internal.InboundLobbyMessage;
+import com.faforever.server.message.internal.OutboundLobbyMessage;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -15,25 +16,26 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
-import org.jspecify.annotations.Nullable;
 
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
 @JBossLog
 @ApplicationScoped
 @RequiredArgsConstructor
 public class PlayerService {
 
-    private final MessageEmitter messageEmitter;
+    private final GameService gameService;
+
+    private final MessageBroker messageBroker;
 
     private final PlayerRepository playerRepository;
     private final FriendOrFoeRepository friendOrFoeRepository;
     private final AssignedAvatarRepository assignedAvatarRepository;
+    private final UserGroupAssignmentRepository userGroupAssignmentRepository;
 
     private final DtoMapper dtoMapper;
 
@@ -50,18 +52,24 @@ public class PlayerService {
         Player player = playerIdMap.computeIfAbsent(playerId, playerRepository::loadPlayer);
         Player existingPlayer = sessionPlayerMap.putIfAbsent(sessionId, player);
         if (existingPlayer != null && existingPlayer != player) {
-            throw new IllegalStateException("Session already has an existing player of id %d".formatted(existingPlayer.getId()));
+            throw new IllegalStateException(
+                    "Session already has an existing player of id %d".formatted(existingPlayer.getId()));
         }
 
         Set<String> channels = new HashSet<>();
         player.getClan().map("#%s_clan"::formatted).ifPresent(channels::add);
+        if (userGroupAssignmentRepository.isPlayerModerator(playerId)) {
+            channels.add("#moderators");
+        }
 
-        messageEmitter.send(new MessageRequest.ForSession(sessionId,
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId,
                 new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player), OffsetDateTime.now())));
-        messageEmitter.send(new MessageRequest.ForSession(sessionId,
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId,
                 new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds())));
-        messageEmitter.send(new MessageRequest.ForSession(sessionId,
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId,
                 new SocialMessage.PlayerInfoList(dtoMapper.map(playerIdMap.values()))));
+
+        gameService.sendGamesToSession(sessionId);
 
         player.addSession(sessionId);
         markDirty(player);
@@ -79,46 +87,66 @@ public class PlayerService {
         }
     }
 
-    public void changeSocialRelationship(SocialRequest.FriendOrFoe friendOrFoeRequest) {
-        long sessionId = friendOrFoeRequest.sessionId();
-        Player player = sessionPlayerMap.get(sessionId);
-        if (player == null) {
-            return;
-        }
-        int targetId = friendOrFoeRequest.targetId();
-        switch (friendOrFoeRequest) {
-            case SocialRequest.FriendOrFoe.Add(_, _, SocialRequest.FriendOrFoe.Status status) -> {
-                FriendOrFoeEntity.Status entityStatus = switch (status) {
-                    case FOE -> FriendOrFoeEntity.Status.FOE;
-                    case FRIEND -> FriendOrFoeEntity.Status.FRIEND;
-                };
-                friendOrFoeRepository.upsertPlayerRelationship(player.getId(), targetId, entityStatus);
-                switch (entityStatus) {
-                    case FOE -> player.addFoe(targetId);
-                    case FRIEND -> player.addFriend(targetId);
+    public void handleRequest(InboundLobbyMessage<SocialMessage.Client> request) {
+        int playerId = request.playerId();
+        switch (request.message()) {
+            case SocialMessage.ListAvatarsRequest _ -> sendAvatars(request.sessionId());
+            case SocialMessage.SelectAvatarRequest selectAvatarRequest -> selectAvatar(playerId, selectAvatarRequest);
+            case SocialMessage.RemoveAvatarRequest _ -> removeAvatar(playerId);
+            case SocialMessage.SocialAddRequest(Integer friendId, Integer foeId) -> {
+                if (friendId != null) {
+                    addSocialRelationship(playerId, friendId, FriendOrFoeEntity.Status.FRIEND);
+                }
+                if (foeId != null) {
+                    addSocialRelationship(playerId, foeId, FriendOrFoeEntity.Status.FOE);
                 }
             }
-            case SocialRequest.FriendOrFoe.Remove _ -> {
-                friendOrFoeRepository.deletePlayerRelationship(player.getId(), targetId);
-                player.removeFriendOrFoe(targetId);
+            case SocialMessage.SocialRemoveRequest(Integer friendId, Integer foeId) -> {
+                if (friendId != null) {
+                    removeSocialRelationship(playerId, friendId);
+                }
+                if (foeId != null) {
+                    removeSocialRelationship(playerId, foeId);
+                }
             }
         }
     }
 
-    public void sendAvatars(SocialRequest.Avatars avatarsRequest) {
-        long sessionId = avatarsRequest.sessionId();
+    private void addSocialRelationship(int playerId, int targetId, FriendOrFoeEntity.Status status) {
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            return;
+        }
+        friendOrFoeRepository.upsertPlayerRelationship(player.getId(), targetId, status);
+        switch (status) {
+            case FOE -> player.addFoe(targetId);
+            case FRIEND -> player.addFriend(targetId);
+        }
+        //TODO: Handle game visibility changes
+    }
+
+    private void removeSocialRelationship(int playerId, int targetId) {
+        Player player = playerIdMap.get(playerId);
+        if (player == null) {
+            return;
+        }
+        friendOrFoeRepository.deletePlayerRelationship(player.getId(), targetId);
+        player.removeFriendOrFoe(targetId);
+        //TODO: Handle game visibility changes
+    }
+
+    private void sendAvatars(long sessionId) {
         Player player = sessionPlayerMap.get(sessionId);
         if (player == null) {
             return;
         }
         Set<Avatar> avatars = assignedAvatarRepository.findAssignedAvatarsByPlayer(player.getId());
         SocialMessage.AvatarInfoList avatarInfoList = new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars));
-        messageEmitter.send(new MessageRequest.ForSession(sessionId, avatarInfoList));
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, avatarInfoList));
     }
 
-    public void selectAvatar(SocialRequest.SelectAvatar selectRequest) {
-        long sessionId = selectRequest.sessionId();
-        Player player = sessionPlayerMap.get(sessionId);
+    private void selectAvatar(int playerId, SocialMessage.SelectAvatarRequest selectRequest) {
+        Player player = playerIdMap.get(playerId);
         if (player == null) {
             return;
         }
@@ -133,9 +161,8 @@ public class PlayerService {
         markDirty(player);
     }
 
-    public void removeAvatar(SocialRequest.RemoveAvatar removeRequest) {
-        long sessionId = removeRequest.sessionId();
-        Player player = sessionPlayerMap.get(sessionId);
+    private void removeAvatar(int playerId) {
+        Player player = playerIdMap.get(playerId);
         if (player == null) {
             return;
         }
@@ -157,27 +184,16 @@ public class PlayerService {
         return player;
     }
 
-    public boolean sessionLacksPermission(long sessionId, String permission) {
-        Player player = sessionPlayerMap.get(sessionId);
+    public Player getActivePlayer(int playerId) {
+        Player player = playerIdMap.get(playerId);
         if (player == null) {
-            throw new IllegalArgumentException("Session id %d not associated with a player".formatted(sessionId));
+            throw new IllegalArgumentException("Player is not online");
         }
-        return playerRepository.playerLacksPermission(player.getId(), permission);
+        return player;
     }
 
-    public void broadcast(LobbyMessage.Broadcast message) {
-        broadcast(_ -> message);
-    }
-
-    public void broadcast(Function<Player, LobbyMessage.@Nullable Broadcast> messageFunction) {
-        sessionPlayerMap.forEach((sessionId, player) -> {
-            LobbyMessage.Broadcast message = messageFunction.apply(player);
-            if (message == null) {
-                return;
-            }
-
-            messageEmitter.send(new MessageRequest.ForSession(sessionId, message));
-        });
+    public Set<Player> getOnlinePlayers() {
+        return Set.copyOf(playerIdMap.values());
     }
 
     void markDisconnected(Player player) {
@@ -205,7 +221,7 @@ public class PlayerService {
         }
 
         Set<PlayerInfo> playerInfos = dtoMapper.map(frozenDirtyPlayers);
-        broadcast(new SocialMessage.PlayerInfoList(playerInfos));
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forAll(new SocialMessage.PlayerInfoList(playerInfos)));
 
         dirtyPlayers.removeAll(frozenDirtyPlayers);
     }

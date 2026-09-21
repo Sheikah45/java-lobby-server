@@ -27,7 +27,7 @@ public class Player {
 
     @Getter
     @Setter(AccessLevel.PACKAGE)
-    private @Nullable String country;
+    private String country = "";
     private @Nullable String clan;
     private @Nullable Avatar avatar;
     private @Nullable Game game;
@@ -42,7 +42,7 @@ public class Player {
         this.username = username;
     }
 
-    public static Player from(PlayerEntity playerEntity) {
+    static Player from(PlayerEntity playerEntity) {
         Player player = new Player(playerEntity.getId(), playerEntity.getName());
         if (playerEntity.getSelectedAvatar() != null) {
             player.setAvatar(Avatar.from(playerEntity.getSelectedAvatar()));
@@ -76,7 +76,7 @@ public class Player {
         return State.IDLE;
     }
 
-    public void addFriend(int playerId) {
+    void addFriend(int playerId) {
         friendIds.add(playerId);
         foeIds.remove(playerId);
     }
@@ -85,11 +85,11 @@ public class Player {
         return friendIds.contains(playerId);
     }
 
-    public Set<Integer> getFriendIds() {
+    Set<Integer> getFriendIds() {
         return Set.copyOf(friendIds);
     }
 
-    public void addFoe(int playerId) {
+    void addFoe(int playerId) {
         foeIds.add(playerId);
         friendIds.remove(playerId);
     }
@@ -98,12 +98,12 @@ public class Player {
         return foeIds.contains(playerId);
     }
 
-    public void removeFriendOrFoe(int playerId) {
+    void removeFriendOrFoe(int playerId) {
         foeIds.remove(playerId);
         friendIds.remove(playerId);
     }
 
-    public Set<Integer> getFoeIds() {
+    Set<Integer> getFoeIds() {
         return Set.copyOf(foeIds);
     }
 
@@ -192,6 +192,10 @@ public class Player {
 
     boolean hasNoSession() {
         return sessionIds.isEmpty();
+    }
+
+    public enum State {
+        IDLE, PLAYING, HOSTING, JOINING, SEARCHING_LADDER, STARTING_AUTOMATCH, STARTING_GAME
     }
 
 }
