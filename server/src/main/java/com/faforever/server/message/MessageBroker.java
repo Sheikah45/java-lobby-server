@@ -69,6 +69,16 @@ public class MessageBroker {
         sessionHandlerMap.keySet().forEach(sessionId -> sendMessageToSession(sessionId, message));
     }
 
+    private void sendMessageToPlayer(int playerId, LobbyMessage.Server message) {
+        Set<Long> playerSessions = playerSessionMap.getOrDefault(playerId, Set.of());
+        if (playerSessions.isEmpty()) {
+            LOG.warn("No active sessions for player");
+            return;
+        }
+
+        playerSessions.forEach(sessionId -> sendMessageToSession(sessionId, message));
+    }
+
     private void sendMessageToSession(long sessionId, LobbyMessage.Server message) {
         SessionHandler sessionHandler = sessionHandlerMap.get(sessionId);
         if (sessionHandler == null) {
@@ -82,16 +92,6 @@ public class MessageBroker {
         ) && style == AdminMessage.Style.KICK) {
             sessionHandler.close();
         }
-    }
-
-    private void sendMessageToPlayer(int playerId, LobbyMessage.Server message) {
-        Set<Long> playerSessions = playerSessionMap.getOrDefault(playerId, Set.of());
-        if (playerSessions.isEmpty()) {
-            LOG.warn("No active sessions for player");
-            return;
-        }
-
-        playerSessions.forEach(sessionId -> sendMessageToSession(sessionId, message));
     }
 
     void registerSession(SessionHandler sessionHandler) {

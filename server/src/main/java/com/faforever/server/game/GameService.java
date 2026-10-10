@@ -69,10 +69,13 @@ public class GameService {
     }
 
     public void sendGamesToSession(long sessionId) {
-        Player player = playerService.getSessionPlayer(sessionId);
         Set<Game> games = Set.copyOf(gameIdMap.values());
-        GameMessage.GameInfoList gameInfoMessage = createFilteredGameInfoMessage(games, player);
-        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, gameInfoMessage));
+        Player player = playerService.getSessionPlayer(sessionId);
+        GameMessage.GameInfoList filteredGameInfoMessage = createFilteredGameInfoMessage(games, player);
+        if (filteredGameInfoMessage.games().isEmpty()) {
+            return;
+        }
+        messageBroker.handleOutboundMessage(OutboundLobbyMessage.forSession(sessionId, filteredGameInfoMessage));
     }
 
     private void hostGame(long sessionId, GameMessage.HostGameRequest hostMessage) {

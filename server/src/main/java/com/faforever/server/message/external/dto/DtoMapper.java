@@ -1,15 +1,14 @@
 package com.faforever.server.message.external.dto;
 
-import com.faforever.server.mapstruct.DefaultMapperConfig;
 import com.faforever.server.domain.AvatarEntity;
 import com.faforever.server.game.Game;
+import com.faforever.server.mapstruct.DefaultMapperConfig;
 import com.faforever.server.mapstruct.OptionalMapper;
 import com.faforever.server.message.external.GameMessage;
+import com.faforever.server.player.Avatar;
 import com.faforever.server.player.Player;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
-import com.faforever.server.player.Avatar;
-import com.faforever.server.player.State;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -27,7 +26,7 @@ public abstract class DtoMapper {
     @Mapping(target = "login", source = "username")
     public abstract PlayerInfo map(Player player);
 
-    public PlayerInfo.State map(State state) {
+    public PlayerInfo.State map(Player.State state) {
         return switch (state) {
             case OFFLINE -> PlayerInfo.State.OFFLINE;
             case null, default -> null;
@@ -69,7 +68,7 @@ public abstract class DtoMapper {
     @Mapping(target = "team", ignore = true)
     @Mapping(target = "name", source = "title")
     @Mapping(target = "mapPosition", ignore = true)
-    @Mapping(target = "mapName", ignore = true)
+    @Mapping(target = "mapName", source = "mapName")
     @Mapping(target = "lobbyMode", source = "gameType")
     @Mapping(target = "leaderboard", source = "leaderboard.technicalName")
     @Mapping(target = "gameOptions", ignore = true)

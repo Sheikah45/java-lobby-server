@@ -55,8 +55,11 @@ public class GameServiceTest {
 
     @Test
     void testHostGame() {
+        String mapname = "scmp_009";
+        String title = "game";
+        String featuredMod = "faf";
         gameService.handleRequest(createInboundMessage(
-                new GameMessage.HostGameRequest("scmp_009", "game", "faf", GameAccess.PUBLIC, null,
+                new GameMessage.HostGameRequest(mapname, title, featuredMod, GameAccess.PUBLIC, null,
                         GameVisibility.PUBLIC, null, null, false)));
 
         ArgumentCaptor<OutboundLobbyMessage<GameMessage.GameLaunchResponse>> captor = captor();
@@ -71,8 +74,8 @@ public class GameServiceTest {
 
         GameMessage.GameLaunchResponse gameLaunchResponse = message.message();
         assertThat(gameLaunchResponse,
-                equalTo(new GameMessage.GameLaunchResponse(1, "game", "faf", LobbyMode.DEFAULT_LOBBY, GameType.CUSTOM,
-                        "global", "scmp_009", null, null, Map.of(), null, null)));
+                equalTo(new GameMessage.GameLaunchResponse(1, title, featuredMod, LobbyMode.DEFAULT_LOBBY, GameType.CUSTOM,
+                        "global", mapname, null, null, Map.of(), null, null)));
     }
 
     private InboundLobbyMessage<GameMessage.Client> createInboundMessage(GameMessage.Client message) {
