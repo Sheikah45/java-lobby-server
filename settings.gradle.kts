@@ -5,9 +5,7 @@ pluginManagement {
         mavenLocal()
     }
     plugins {
-        id("io.quarkus") version "3.39.1"
+        id("io.quarkus") version "4.0.0.Beta1"
     }
 }
 rootProject.name = "java-lobby-server"
-
-include("server")
