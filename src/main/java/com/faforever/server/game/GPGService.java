@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class GPGService {
         this.messageBroker = messageBroker;
     }
 
+    @Incoming("gpg-inbound")
     public void handleRequest(InboundLobbyMessage<GPGMessage.Client> request) {
         long sessionId = request.sessionId();
         int playerId = request.playerId();

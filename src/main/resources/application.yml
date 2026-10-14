@@ -15,6 +15,9 @@ quarkus:
     password: ${DB_PASSWORD:banana}
     jdbc:
       url: jdbc:mariadb://${DATABASE_HOST:localhost}:${DATABASE_PORT:3306}/${DATABASE_NAME:faf_lobby}?ssl=false
+  rest-client:
+    message-broker:
+      url: ${MESSAGE_BROKER_BASE_URL:http://localhost:8003}
 
 rabbitmq-host: ${RABBITMQ_HOST:localhost}
 rabbitmq-port: ${RABBITMQ_PORT:5672}
@@ -31,11 +34,46 @@ mp:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}
     incoming:
-      lobby-inbound:
+      social-inbound:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}
         queue:
           durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: lobby.social.#
+      admin-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: lobby.admin.#
+      game-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: lobby.game.#
+      matchmaker-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: lobby.matchmaker.#
+      gpg-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: gpg.#
       player-connection:
         connector: smallrye-rabbitmq
         virtual-host: ${RABBITMQ_VHOST:/faf-core}

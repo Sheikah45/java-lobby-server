@@ -60,7 +60,7 @@ public class GameServiceTest {
         String title = "game";
         String featuredMod = "faf";
         gameService.handleRequest(createInboundMessage(
-                new GameMessage.HostGameRequest(mapname, title, featuredMod, GameAccess.PUBLIC, null,
+                new GameMessage.HostGameRequest(mapname, title, featuredMod, new boolean[0], 0, GameAccess.PUBLIC, null,
                         GameVisibility.PUBLIC, null, null, false)));
 
         ArgumentCaptor<OutboundLobbyMessage<GameMessage.GameLaunchResponse>> captor = captor();

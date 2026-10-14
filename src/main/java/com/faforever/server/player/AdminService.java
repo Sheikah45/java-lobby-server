@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 @JBossLog
 @ApplicationScoped
@@ -24,6 +25,7 @@ public class AdminService {
         this.messageBroker = messageBroker;
     }
 
+    @Incoming("admin-inbound")
     public void handleRequest(InboundLobbyMessage<AdminMessage.Client> request) {
         int playerId = request.playerId();
         switch (request.message()) {

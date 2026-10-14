@@ -29,6 +29,7 @@ dependencies {
     implementation("io.quarkus:quarkus-hibernate-orm-panache")
     implementation("io.quarkus:quarkus-arc")
     implementation("io.quarkus:quarkus-logging-json")
+    implementation("io.quarkus:quarkus-rest-client-jackson")
 
     val jsonSchemaVersion = "5.0.0"
     implementation("com.github.victools:jsonschema-generator:$jsonSchemaVersion")

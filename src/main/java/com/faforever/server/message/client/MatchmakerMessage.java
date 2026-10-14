@@ -5,12 +5,29 @@ import com.faforever.server.message.client.dto.MatchmakerState;
 import com.faforever.server.message.client.dto.PartyMember;
 import com.faforever.server.message.client.dto.VetoData;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 import java.util.List;
 import java.util.Set;
 
 public sealed interface MatchmakerMessage {
 
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
+    @JsonSubTypes(
+            {
+                    @JsonSubTypes.Type(value = MatchmakerMessage.InviteToPartyRequest.class, name = "invite_to_party"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.AcceptInviteToPartyRequest.class, name = "accept_party_invite"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.KickPlayerFromPartyRequest.class, name = "kick_player_from_party"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.SelectPartyFactionsRequest.class, name = "set_party_factions"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.UnreadyPartyRequest.class, name = "unready_party"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.LeavePartyRequest.class, name = "leave_party"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.GameMatchmakingRequest.class, name = "game_matchmaking"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.SetPlayerVetoesRequest.class, name = "set_player_vetoes"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.MatchmakerInfoRequest.class, name = "matchmaker_info"),
+                    @JsonSubTypes.Type(value = MatchmakerMessage.IsReadyResponse.class, name = "is_ready_response"),
+            }
+    )
     sealed interface Client extends MatchmakerMessage, LobbyMessage.Client {}
 
     sealed interface Server extends MatchmakerMessage, LobbyMessage.Server {}

@@ -5,6 +5,8 @@ import com.faforever.server.message.client.dto.PlayerInfo;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
@@ -14,6 +16,14 @@ public sealed interface SocialMessage  {
 
     sealed interface Server extends SocialMessage, LobbyMessage.Server {}
 
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
+    @JsonSubTypes(
+            {
+                    @JsonSubTypes.Type(value = SocialMessage.SocialAddRequest.class, name = "social_add"),
+                    @JsonSubTypes.Type(value = SocialMessage.SocialRemoveRequest.class, name = "social_remove"),
+                    @JsonSubTypes.Type(value = SocialMessage.AvatarRequest.class, name = "avatar"),
+            }
+    )
     sealed interface Client extends SocialMessage, LobbyMessage.Client {}
 
     record PlayerInfoList(

@@ -3,6 +3,8 @@ package com.faforever.server.message.client;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
@@ -11,6 +13,12 @@ public sealed interface AdminMessage {
 
     sealed interface Server extends AdminMessage, LobbyMessage.Server {}
 
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
+    @JsonSubTypes(
+            {
+                    @JsonSubTypes.Type(value = AdminMessage.Client.class, name = "admin"),
+            }
+    )
     sealed interface Client extends AdminMessage, LobbyMessage.Client {}
 
     enum Action {

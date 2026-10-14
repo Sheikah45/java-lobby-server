@@ -5,12 +5,14 @@ import com.faforever.server.message.service.InboundLobbyMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 @JBossLog
 @RequiredArgsConstructor
 @ApplicationScoped
 public class MatchmakerService {
 
+    @Incoming("matchmaker-inbound")
     public void handleRequest(InboundLobbyMessage<MatchmakerMessage.Client> request) {
         switch (request.message()) {
             case MatchmakerMessage.GameMatchmakingRequest _ -> {}

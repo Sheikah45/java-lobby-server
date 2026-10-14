@@ -6,6 +6,8 @@ import com.faforever.server.message.client.dto.GameType;
 import com.faforever.server.message.client.dto.GameVisibility;
 import com.faforever.server.message.client.dto.LobbyMode;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -13,6 +15,14 @@ import java.util.Map;
 
 public sealed interface GameMessage {
 
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
+    @JsonSubTypes(
+            {
+                    @JsonSubTypes.Type(value = GameMessage.HostGameRequest.class, name = "game_host"),
+                    @JsonSubTypes.Type(value = GameMessage.JoinGameRequest.class, name = "game_join"),
+                    @JsonSubTypes.Type(value = GameMessage.RestoreGameSessionRequest.class, name = "restore_game_session"),
+            }
+    )
     sealed interface Client extends GameMessage, LobbyMessage.Client {}
 
     sealed interface Server extends GameMessage, LobbyMessage.Server {}
@@ -54,13 +64,13 @@ public sealed interface GameMessage {
             String title,
             @JsonProperty("mod") @Nullable String featuredMod,
             @Deprecated boolean[] options,
-            @Deprecated int version,
+            @Deprecated Integer version,
             GameAccess access,
             @Nullable String password,
             GameVisibility visibility,
             @Nullable Integer ratingMin,
             @Nullable Integer ratingMax,
-            boolean enforceRatingRange
+            Boolean enforceRatingRange
     ) implements Client {}
 
     record JoinGameRequest(

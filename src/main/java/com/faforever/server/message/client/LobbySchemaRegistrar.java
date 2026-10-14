@@ -43,11 +43,14 @@ public class LobbySchemaRegistrar {
 
     @Startup
     void registerSchemas() {
-        registerSchemasUsingTypeInfo(LobbyMessage.Client.class, LobbySchemaDetails.Direction.INBOUND);
-        registerSchemasUsingTypeInfo(LobbyMessage.Server.class, LobbySchemaDetails.Direction.OUTBOUND);
+        registerSchemasUsingTypeInfo(SocialMessage.Client.class, LobbySchemaDetails.Direction.INBOUND, "social");
+        registerSchemasUsingTypeInfo(GameMessage.Client.class, LobbySchemaDetails.Direction.INBOUND, "game");
+        registerSchemasUsingTypeInfo(AdminMessage.Client.class, LobbySchemaDetails.Direction.INBOUND, "admin");
+        registerSchemasUsingTypeInfo(MatchmakerMessage.Client.class, LobbySchemaDetails.Direction.INBOUND, "matchmaker");
+        registerSchemasUsingTypeInfo(LobbyMessage.Server.class, LobbySchemaDetails.Direction.OUTBOUND, "");
     }
 
-    private void registerSchemasUsingTypeInfo(Class<?> baseMessageClass, LobbySchemaDetails.Direction direction) {
+    private void registerSchemasUsingTypeInfo(Class<?> baseMessageClass, LobbySchemaDetails.Direction direction, String route) {
         JsonTypeInfo typeInfo = baseMessageClass.getAnnotation(JsonTypeInfo.class);
         if (typeInfo == null) {
             throw new IllegalArgumentException("No JsonTypeInfo");
@@ -93,7 +96,7 @@ public class LobbySchemaRegistrar {
 
         identifierMap.forEach((messageClass, command) -> {
             ObjectNode schemaNode = generator.generateSchema(messageClass);
-            schemaDetailsEmitter.send(Message.of(new LobbySchemaDetails(command, direction, schemaNode),
+            schemaDetailsEmitter.send(Message.of(new LobbySchemaDetails(command, direction, schemaNode, route),
                     Metadata.of(OutgoingRabbitMQMetadata.builder().withDeliveryMode(2).build())));
         });
     }

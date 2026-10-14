@@ -10,6 +10,8 @@ import com.faforever.server.message.client.dto.PlayerInfo;
 import com.faforever.server.message.service.InboundLobbyMessage;
 import com.faforever.server.message.service.OutboundLobbyMessage;
 import com.faforever.server.message.service.PlayerConnectionDetails;
+import com.faforever.server.messagebroker.MessageBrokerAPIClient;
+import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -19,6 +21,7 @@ import lombok.extern.jbosslog.JBossLog;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.OffsetDateTime;
 import java.util.HashSet;
@@ -32,12 +35,14 @@ public class PlayerService {
 
     private final GameService gameService;
 
-    private final Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> messageBroker;
+    private final Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> outboundLobbyMessageEmitter;
 
     private final PlayerRepository playerRepository;
     private final FriendOrFoeRepository friendOrFoeRepository;
     private final AssignedAvatarRepository assignedAvatarRepository;
     private final UserGroupAssignmentRepository userGroupAssignmentRepository;
+
+    private final MessageBrokerAPIClient messageBrokerAPIClient;
 
     private final DtoMapper dtoMapper;
 
@@ -50,23 +55,34 @@ public class PlayerService {
     @Getter(AccessLevel.PACKAGE)
     private final Set<Player> disconnectedPlayers = ConcurrentHashMap.newKeySet();
 
-    PlayerService(GameService gameService,
-                         @Channel("lobby-outbound") Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> messageBroker,
-                         PlayerRepository playerRepository, FriendOrFoeRepository friendOrFoeRepository,
-                         AssignedAvatarRepository assignedAvatarRepository,
-                         UserGroupAssignmentRepository userGroupAssignmentRepository, DtoMapper dtoMapper) {
+    PlayerService(GameService gameService, @Channel(
+                          "lobby-outbound") Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> outboundLobbyMessageEmitter,
+                  PlayerRepository playerRepository, FriendOrFoeRepository friendOrFoeRepository,
+                  AssignedAvatarRepository assignedAvatarRepository,
+                  UserGroupAssignmentRepository userGroupAssignmentRepository,
+                  @RestClient MessageBrokerAPIClient messageBrokerAPIClient, DtoMapper dtoMapper) {
         this.gameService = gameService;
-        this.messageBroker = messageBroker;
+        this.outboundLobbyMessageEmitter = outboundLobbyMessageEmitter;
         this.playerRepository = playerRepository;
         this.friendOrFoeRepository = friendOrFoeRepository;
         this.assignedAvatarRepository = assignedAvatarRepository;
         this.userGroupAssignmentRepository = userGroupAssignmentRepository;
+        this.messageBrokerAPIClient = messageBrokerAPIClient;
         this.dtoMapper = dtoMapper;
+    }
+
+    @Startup
+    void registerExistingPlayers() {
+        messageBrokerAPIClient.getActiveSessions()
+                              .stream()
+                              .map(playerConnectionDetails -> markPlayerOnline(playerConnectionDetails.sessionId(),
+                                      playerConnectionDetails.playerId()))
+                              .forEach(this::markDirty);
     }
 
     @Incoming("player-connection")
     @RunOnVirtualThread
-    public void handlePlayerConnectionDetails(PlayerConnectionDetails playerConnectionDetails) {
+    void handlePlayerConnectionDetails(PlayerConnectionDetails playerConnectionDetails) {
         if (playerConnectionDetails.connected()) {
             registerSessionForPlayer(playerConnectionDetails.sessionId(), playerConnectionDetails.playerId());
         } else {
@@ -75,12 +91,7 @@ public class PlayerService {
     }
 
     void registerSessionForPlayer(long sessionId, int playerId) {
-        Player player = playerIdMap.computeIfAbsent(playerId, playerRepository::loadPlayer);
-        Player existingPlayer = sessionPlayerMap.putIfAbsent(sessionId, player);
-        if (existingPlayer != null && existingPlayer != player) {
-            throw new IllegalStateException(
-                    "Session already has an existing player of id %d".formatted(existingPlayer.getId()));
-        }
+        Player player = markPlayerOnline(sessionId, playerId);
 
         Set<String> channels = new HashSet<>();
         player.getClan().map("#%s_clan"::formatted).ifPresent(channels::add);
@@ -88,17 +99,27 @@ public class PlayerService {
             channels.add("#moderators");
         }
 
-        messageBroker.send(OutboundLobbyMessage.forSession(sessionId,
+        outboundLobbyMessageEmitter.send(OutboundLobbyMessage.forSession(sessionId,
                 new ConnectionMessage.LoginSuccessResponse(dtoMapper.map(player), OffsetDateTime.now())));
-        messageBroker.send(OutboundLobbyMessage.forSession(sessionId,
+        outboundLobbyMessageEmitter.send(OutboundLobbyMessage.forSession(sessionId,
                 new SocialMessage.SocialInfo(channels, player.getFriendIds(), player.getFoeIds())));
-        messageBroker.send(OutboundLobbyMessage.forSession(sessionId,
+        outboundLobbyMessageEmitter.send(OutboundLobbyMessage.forSession(sessionId,
                 new SocialMessage.PlayerInfoList(dtoMapper.map(playerIdMap.values()))));
 
         gameService.sendGamesToSession(sessionId);
 
         player.addSession(sessionId);
         markDirty(player);
+    }
+
+    private Player markPlayerOnline(long sessionId, int playerId) {
+        Player player = playerIdMap.computeIfAbsent(playerId, playerRepository::loadPlayer);
+        Player existingPlayer = sessionPlayerMap.putIfAbsent(sessionId, player);
+        if (existingPlayer != null && existingPlayer != player) {
+            throw new IllegalStateException(
+                    "Session already has an existing player of id %d".formatted(existingPlayer.getId()));
+        }
+        return player;
     }
 
     void unregisterSession(long sessionId) {
@@ -113,6 +134,7 @@ public class PlayerService {
         }
     }
 
+    @Incoming("social-inbound")
     public void handleRequest(InboundLobbyMessage<SocialMessage.Client> request) {
         int playerId = request.playerId();
         switch (request.message()) {
@@ -168,7 +190,7 @@ public class PlayerService {
         }
         Set<Avatar> avatars = assignedAvatarRepository.findAssignedAvatarsByPlayer(player.getId());
         SocialMessage.AvatarInfoList avatarInfoList = new SocialMessage.AvatarInfoList(dtoMapper.mapAvatars(avatars));
-        messageBroker.send(OutboundLobbyMessage.forSession(sessionId, avatarInfoList));
+        outboundLobbyMessageEmitter.send(OutboundLobbyMessage.forSession(sessionId, avatarInfoList));
     }
 
     private void selectAvatar(int playerId, SocialMessage.SelectAvatarRequest selectRequest) {
@@ -247,7 +269,7 @@ public class PlayerService {
         }
 
         Set<PlayerInfo> playerInfos = dtoMapper.map(frozenDirtyPlayers);
-        messageBroker.send(OutboundLobbyMessage.forAll(new SocialMessage.PlayerInfoList(playerInfos)));
+        outboundLobbyMessageEmitter.send(OutboundLobbyMessage.forAll(new SocialMessage.PlayerInfoList(playerInfos)));
 
         dirtyPlayers.removeAll(frozenDirtyPlayers);
     }

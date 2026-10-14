@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.jbosslog.JBossLog;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -63,6 +64,7 @@ public class GameService {
         gameCounter.set(gameRepository.findMaxGameId());
     }
 
+    @Incoming("game-inbound")
     public void handleRequest(InboundLobbyMessage<GameMessage.Client> request) {
         long sessionId = request.sessionId();
         switch (request.message()) {
