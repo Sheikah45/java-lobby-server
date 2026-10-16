@@ -12,11 +12,16 @@ import org.skyscreamer.jsonassert.JSONCompareMode;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
 
-@QuarkusTest
 public class MessageSerializationTest {
 
-    @Inject
-    JsonMapper jsonMapper;
+    private JsonMapper jsonMapper;
+
+    @BeforeEach
+    void setup() {
+        jsonMapper = JsonMapper.builder()
+                               .propertyNamingStrategy(new PropertyNamingStrategies.SnakeCaseStrategy())
+                               .build();
+    }
 
     @Test
     void testOutboundSerialization() throws Exception {

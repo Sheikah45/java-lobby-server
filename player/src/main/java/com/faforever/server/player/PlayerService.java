@@ -13,9 +13,9 @@ import com.faforever.server.message.service.PlayerConnectionDetails;
 import com.faforever.server.messagebroker.MessageBrokerAPIClient;
 import com.faforever.server.rating.LeaderboardRating;
 import com.faforever.server.rating.LeaderboardRatingRepository;
-import io.quarkus.runtime.Startup;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.common.annotation.RunOnVirtualThread;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class PlayerService {
 
-    private final Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> outboundLobbyMessageEmitter;
+    private final Emitter<OutboundLobbyMessage<LobbyMessage.Server>> outboundLobbyMessageEmitter;
 
     private final LeaderboardRatingRepository leaderboardRatingRepository;
     private final PlayerRepository playerRepository;
@@ -58,7 +58,7 @@ public class PlayerService {
     private OffsetDateTime lastRatingUpdateTime = OffsetDateTime.now();
 
     PlayerService(
-            @Channel("lobby-outbound") Emitter<OutboundLobbyMessage<? extends LobbyMessage.Server>> outboundLobbyMessageEmitter,
+            @Channel("lobby-outbound") Emitter<OutboundLobbyMessage<LobbyMessage.Server>> outboundLobbyMessageEmitter,
             LeaderboardRatingRepository leaderboardRatingRepository, PlayerRepository playerRepository,
             FriendOrFoeRepository friendOrFoeRepository, AssignedAvatarRepository assignedAvatarRepository,
             UserGroupAssignmentRepository userGroupAssignmentRepository,
@@ -72,7 +72,7 @@ public class PlayerService {
         this.messageBrokerAPIClient = messageBrokerAPIClient;
     }
 
-    @Startup
+    @PostConstruct
     void registerExistingPlayers() {
         messageBrokerAPIClient.getActiveSessions()
                               .stream()

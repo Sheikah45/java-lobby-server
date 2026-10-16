@@ -11,20 +11,18 @@ import com.faforever.server.message.client.dto.PlayerInfo;
 import com.faforever.server.message.service.InboundLobbyMessage;
 import com.faforever.server.message.service.OutboundLobbyMessage;
 import com.faforever.server.message.service.OutboundTarget;
+import com.faforever.server.message.service.PlayerConnectionDetails;
+import com.faforever.server.messagebroker.MessageBrokerAPIClient;
 import com.faforever.server.rating.Leaderboard;
 import com.faforever.server.rating.LeaderboardRating;
 import io.quarkus.test.InjectMock;
-import io.quarkus.test.junit.QuarkusTest;
-import io.smallrye.reactive.messaging.memory.TestingConnector;
-import jakarta.enterprise.inject.Instance;
+import io.quarkus.test.component.QuarkusComponentTest;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.reactive.messaging.Message;
-import org.eclipse.microprofile.reactive.messaging.spi.Connector;
-import org.junit.jupiter.api.AfterEach;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -39,15 +37,17 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.isA;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentCaptor.captor;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-@QuarkusTest
+@QuarkusComponentTest
 class PlayerServiceTest {
 
     private static final int PLAYER_ID = 1;
@@ -56,17 +56,14 @@ class PlayerServiceTest {
             new AvatarInfo("temp", "temporary"), "",
             Map.of("leaderboard", new LeaderboardStats(1, new LeaderboardStats.Rating(1000, 100))), null);
     private static final Avatar AVATAR = new Avatar("temp", "temporary");
-    private static final String LOBBY_OUTBOUND_CHANNEL = "lobby-outbound";
 
     @Inject
-    Instance<PlayerService> playerServiceInstance;
+    PlayerService playerService;
 
-    private PlayerService playerService;
-
-    @Inject
-    @Connector("smallrye-testing")
-    TestingConnector testingConnector;
-
+    @InjectMock
+    private MessageBrokerAPIClient messageBrokerAPIClient;
+    @InjectMock
+    private Emitter<OutboundLobbyMessage<LobbyMessage.Server>> outboundLobbyMessageEmitter;
     @InjectMock
     private PlayerRepository playerRepository;
     @InjectMock
@@ -80,8 +77,6 @@ class PlayerServiceTest {
 
     @BeforeEach
     void setup() {
-        playerService = playerServiceInstance.get();
-
         player.setClan("TEST");
         player.setAvatar(AVATAR);
         player.updateLeaderboardRatings(List.of(new LeaderboardRating(new Leaderboard("leaderboard"), 1, 1000, 100)));
@@ -89,10 +84,13 @@ class PlayerServiceTest {
         when(playerRepository.loadPlayer(PLAYER_ID)).thenReturn(player);
     }
 
-    @AfterEach
-    void teardown() {
-        playerServiceInstance.destroy(playerService);
-        testingConnector.<OutboundLobbyMessage<?>>outgoing(LOBBY_OUTBOUND_CHANNEL).clear();
+    @Test
+    void testExistingPlayersRegistered() {
+        when(messageBrokerAPIClient.getActiveSessions()).thenReturn(List.of(new PlayerConnectionDetails(PLAYER_ID, SESSION_ID, true)));
+
+        playerService.registerExistingPlayers();
+
+        assertThat(playerService.getDirtyPlayers(), contains(player));
     }
 
     @Nested
@@ -104,11 +102,12 @@ class PlayerServiceTest {
 
             assertThat(playerService.getDirtyPlayers(), contains(player));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(3, sentMessages.size());
+            ArgumentCaptor<OutboundLobbyMessage<LobbyMessage.Server>> messageRequestCaptor = captor();
+            verify(outboundLobbyMessageEmitter, times(3)).send(messageRequestCaptor.capture());
 
-            OutboundLobbyMessage<?> firstMessage = sentMessages.getFirst().getPayload();
+            List<OutboundLobbyMessage<LobbyMessage.Server>> sentMessages = messageRequestCaptor.getAllValues();
+
+            OutboundLobbyMessage<?> firstMessage = sentMessages.getFirst();
             OutboundTarget firstTarget = firstMessage.target();
             assertThat(firstTarget, isA(OutboundTarget.Session.class));
 
@@ -121,7 +120,7 @@ class PlayerServiceTest {
             assertThat(loginSuccessResponse.currentTime(), lessThanOrEqualTo(OffsetDateTime.now()));
             assertThat(loginSuccessResponse.me(), equalTo(PLAYER_INFO));
 
-            OutboundLobbyMessage<?> secondMessage = sentMessages.get(1).getPayload();
+            OutboundLobbyMessage<?> secondMessage = sentMessages.get(1);
             OutboundTarget secondTarget = secondMessage.target();
             assertThat(secondTarget, isA(OutboundTarget.Session.class));
 
@@ -131,7 +130,7 @@ class PlayerServiceTest {
             assertThat(secondMessage.message(),
                     equalTo(new SocialMessage.SocialInfo(Set.of("#TEST_clan"), Set.of(), Set.of())));
 
-            OutboundLobbyMessage<?> thirdMessage = sentMessages.getLast().getPayload();
+            OutboundLobbyMessage<?> thirdMessage = sentMessages.getLast();
             OutboundTarget thirdTarget = thirdMessage.target();
             assertThat(thirdTarget, isA(OutboundTarget.Session.class));
 
@@ -147,11 +146,12 @@ class PlayerServiceTest {
 
             playerService.registerSessionForPlayer(SESSION_ID, PLAYER_ID);
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(3, sentMessages.size());
+            ArgumentCaptor<OutboundLobbyMessage<LobbyMessage.Server>> messageRequestCaptor = captor();
+            verify(outboundLobbyMessageEmitter, times(3)).send(messageRequestCaptor.capture());
 
-            OutboundLobbyMessage<?> secondMessage = sentMessages.get(1).getPayload();
+            List<OutboundLobbyMessage<LobbyMessage.Server>> sentMessages = messageRequestCaptor.getAllValues();
+
+            OutboundLobbyMessage<?> secondMessage = sentMessages.get(1);
             OutboundTarget secondTarget = secondMessage.target();
             assertThat(secondTarget, isA(OutboundTarget.Session.class));
 
@@ -194,11 +194,7 @@ class PlayerServiceTest {
         void testSendAvatarsOfflinePlayer() {
             playerService.handleSocialRequest(createInboundMessage(new SocialMessage.ListAvatarsRequest()));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
-
-            verifyNoInteractions(assignedAvatarRepository);
+            verifyNoInteractions(assignedAvatarRepository, outboundLobbyMessageEmitter);
         }
 
         @Test
@@ -219,9 +215,7 @@ class PlayerServiceTest {
         void testNoActionWhenNoDirty() {
             assertThat(playerService.getDirtyPlayers(), hasSize(0));
             playerService.sendUpdateForDirtyPlayers();
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
+            verifyNoInteractions(outboundLobbyMessageEmitter);
         }
 
         @Test
@@ -243,30 +237,21 @@ class PlayerServiceTest {
         void testBroadcastNoPlayer() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.BroadcastRequest("test")));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
-            verifyNoInteractions(userGroupAssignmentRepository);
+            verifyNoInteractions(outboundLobbyMessageEmitter, userGroupAssignmentRepository);
         }
 
         @Test
         void testKickNoPlayer() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.KickPlayerRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
-            verifyNoInteractions(userGroupAssignmentRepository);
+            verifyNoInteractions(outboundLobbyMessageEmitter, userGroupAssignmentRepository);
         }
 
         @Test
         void testCloseGameNoPlayer() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.ClosePlayerGameRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
-            verifyNoInteractions(userGroupAssignmentRepository);
+            verifyNoInteractions(outboundLobbyMessageEmitter, userGroupAssignmentRepository);
         }
     }
 
@@ -277,8 +262,7 @@ class PlayerServiceTest {
         void setup() {
             playerService.registerSessionForPlayer(SESSION_ID, PLAYER_ID);
             playerService.getDirtyPlayers().clear();
-            testingConnector.<OutboundLobbyMessage<?>>outgoing(LOBBY_OUTBOUND_CHANNEL).clear();
-            Mockito.clearInvocations(userGroupAssignmentRepository);
+            clearInvocations(outboundLobbyMessageEmitter, userGroupAssignmentRepository);
         }
 
         @Test
@@ -316,8 +300,7 @@ class PlayerServiceTest {
             verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FRIEND);
             assertTrue(player.isFriend(otherId));
 
-            playerService.handleSocialRequest(
-                    createInboundMessage(new SocialMessage.SocialRemoveRequest(otherId, null)));
+            playerService.handleSocialRequest(createInboundMessage(new SocialMessage.SocialRemoveRequest(otherId, null)));
 
             verify(friendOrFoeRepository).deletePlayerRelationship(PLAYER_ID, otherId);
             assertFalse(player.isFriend(otherId));
@@ -332,8 +315,7 @@ class PlayerServiceTest {
             verify(friendOrFoeRepository).upsertPlayerRelationship(PLAYER_ID, otherId, FriendOrFoeEntity.Status.FOE);
             assertTrue(player.isFoe(otherId));
 
-            playerService.handleSocialRequest(
-                    createInboundMessage(new SocialMessage.SocialRemoveRequest(null, otherId)));
+            playerService.handleSocialRequest(createInboundMessage(new SocialMessage.SocialRemoveRequest(null, otherId)));
 
             verify(friendOrFoeRepository).deletePlayerRelationship(PLAYER_ID, otherId);
             assertFalse(player.isFoe(otherId));
@@ -373,13 +355,8 @@ class PlayerServiceTest {
 
             playerService.handleSocialRequest(createInboundMessage(new SocialMessage.ListAvatarsRequest()));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(1, sentMessages.size());
-
-            assertEquals(OutboundLobbyMessage.forSession(SESSION_ID,
-                            new SocialMessage.AvatarInfoList(Set.of(new AvatarInfo(AVATAR.url(), AVATAR.description())))),
-                    sentMessages.getFirst().getPayload());
+            verify(outboundLobbyMessageEmitter).send(OutboundLobbyMessage.forSession(SESSION_ID,
+                    new SocialMessage.AvatarInfoList(Set.of(new AvatarInfo(AVATAR.url(), AVATAR.description())))));
         }
 
         @Test
@@ -388,8 +365,7 @@ class PlayerServiceTest {
 
             when(assignedAvatarRepository.updateSelectedAvatar(PLAYER_ID, "new")).thenReturn(avatar);
 
-            playerService.handleSocialRequest(
-                    createInboundMessage(new SocialMessage.SelectAvatarRequest(avatar.url())));
+            playerService.handleSocialRequest(createInboundMessage(new SocialMessage.SelectAvatarRequest(avatar.url())));
 
             assertThat(player.getAvatar().orElseThrow(), equalTo(avatar));
             assertThat(playerService.getDirtyPlayers(), contains(player));
@@ -397,8 +373,7 @@ class PlayerServiceTest {
 
         @Test
         void testSelectAvatarAlreadySelected() {
-            playerService.handleSocialRequest(
-                    createInboundMessage(new SocialMessage.SelectAvatarRequest(AVATAR.url())));
+            playerService.handleSocialRequest(createInboundMessage(new SocialMessage.SelectAvatarRequest(AVATAR.url())));
 
             verifyNoInteractions(assignedAvatarRepository);
             assertThat(player.getAvatar().orElseThrow(), equalTo(AVATAR));
@@ -431,12 +406,8 @@ class PlayerServiceTest {
 
             playerService.sendUpdateForDirtyPlayers();
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(1, sentMessages.size());
-            assertEquals(OutboundLobbyMessage.forAll(new SocialMessage.PlayerInfoList(Set.of(PLAYER_INFO))),
-                    sentMessages.getFirst().getPayload());
-
+            verify(outboundLobbyMessageEmitter).send(
+                    OutboundLobbyMessage.forAll(new SocialMessage.PlayerInfoList(Set.of(PLAYER_INFO))));
             assertThat(playerService.getDirtyPlayers(), hasSize(0));
         }
 
@@ -455,41 +426,30 @@ class PlayerServiceTest {
         void testBroadcast() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.BroadcastRequest("test")));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(1, sentMessages.size());
-            assertEquals(OutboundLobbyMessage.forAll(new AdminMessage.NoticeInfo("test", AdminMessage.Style.INFO)),
-                    sentMessages.getFirst().getPayload());
+            verify(outboundLobbyMessageEmitter).send(OutboundLobbyMessage.forAll(new AdminMessage.NoticeInfo("test", AdminMessage.Style.INFO)));
         }
 
         @Test
         void testBroadcastNoMessage() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.BroadcastRequest("")));
 
-            verifyNoInteractions(userGroupAssignmentRepository);
+            verifyNoInteractions(userGroupAssignmentRepository, outboundLobbyMessageEmitter);
         }
 
         @Test
         void testBroadcastNoPermission() {
-            when(userGroupAssignmentRepository.playerLacksPermission(PLAYER_ID, "ADMIN_BROADCAST_MESSAGE")).thenReturn(
-                    true);
+            when(userGroupAssignmentRepository.playerLacksPermission(PLAYER_ID, "ADMIN_BROADCAST_MESSAGE")).thenReturn(true);
 
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.BroadcastRequest("test")));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
+            verifyNoInteractions(outboundLobbyMessageEmitter);
         }
 
         @Test
         void testKick() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.KickPlayerRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(1, sentMessages.size());
-            assertEquals(OutboundLobbyMessage.forPlayer(2, new AdminMessage.NoticeInfo(null, AdminMessage.Style.KICK)),
-                    sentMessages.getFirst().getPayload());
+            verify(outboundLobbyMessageEmitter).send(OutboundLobbyMessage.forPlayer(2, new AdminMessage.NoticeInfo(null, AdminMessage.Style.KICK)));
         }
 
         @Test
@@ -498,20 +458,14 @@ class PlayerServiceTest {
 
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.KickPlayerRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
+            verifyNoInteractions(outboundLobbyMessageEmitter);
         }
 
         @Test
         void testCloseGame() {
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.ClosePlayerGameRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(1, sentMessages.size());
-            assertEquals(OutboundLobbyMessage.forPlayer(2, new AdminMessage.NoticeInfo(null, AdminMessage.Style.KILL)),
-                    sentMessages.getFirst().getPayload());
+            verify(outboundLobbyMessageEmitter).send(OutboundLobbyMessage.forPlayer(2, new AdminMessage.NoticeInfo(null, AdminMessage.Style.KILL)));
         }
 
         @Test
@@ -520,9 +474,7 @@ class PlayerServiceTest {
 
             playerService.handleAdminRequest(createInboundMessage(new AdminMessage.ClosePlayerGameRequest(2)));
 
-            List<? extends Message<OutboundLobbyMessage<?>>> sentMessages = testingConnector.<OutboundLobbyMessage<?>>outgoing(
-                    LOBBY_OUTBOUND_CHANNEL).sent();
-            assertEquals(0, sentMessages.size());
+            verifyNoInteractions(outboundLobbyMessageEmitter);
         }
     }
 

@@ -15,15 +15,15 @@ public record OutboundLobbyMessage<T extends LobbyMessage.Server>(
         }
     }
 
-    public static <T extends LobbyMessage.Server> OutboundLobbyMessage<T> forPlayer(int playerId, T message) {
+    public static <T extends LobbyMessage.Server> OutboundLobbyMessage<LobbyMessage.Server> forPlayer(int playerId, T message) {
         return new OutboundLobbyMessage<>(new OutboundTarget.Player(playerId), message);
     }
 
-    public static <T extends LobbyMessage.Server> OutboundLobbyMessage<T> forSession(long sessionId, T message) {
+    public static <T extends LobbyMessage.Server> OutboundLobbyMessage<LobbyMessage.Server> forSession(long sessionId, T message) {
         return new OutboundLobbyMessage<>(new OutboundTarget.Session(sessionId), message);
     }
 
-    public static <T extends LobbyMessage.Broadcast> OutboundLobbyMessage<T> forAll(T message) {
+    public static <T extends LobbyMessage.Broadcast> OutboundLobbyMessage<LobbyMessage.Server> forAll(T message) {
         return new OutboundLobbyMessage<>(new OutboundTarget.All(), message);
     }
 }
