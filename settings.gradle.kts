@@ -9,3 +9,7 @@ pluginManagement {
     }
 }
 rootProject.name = "java-lobby-server"
+
+include("player")
+include("game")
+include("matchmaker")

@@ -1,0 +1,97 @@
+quarkus:
+  log:
+    level: INFO
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%c] (%t) %s %X%e%n"
+  devservices:
+    enabled: false
+  application:
+    name: faf-java-server
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+  datasource:
+    db-kind: mariadb
+    username: ${DB_USERNAME:faf-lobby-server}
+    password: ${DB_PASSWORD:banana}
+    jdbc:
+      url: jdbc:mariadb://${DATABASE_HOST:localhost}:${DATABASE_PORT:3306}/${DATABASE_NAME:faf_lobby}?ssl=false
+  rest-client:
+    message-broker:
+      url: ${MESSAGE_BROKER_BASE_URL:http://ws.faforever.localhost}
+
+rabbitmq-host: ${RABBITMQ_HOST:localhost}
+rabbitmq-port: ${RABBITMQ_PORT:5672}
+rabbitmq-username: ${RABBITMQ_USER:faf-lobby-server}
+rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
+
+mp:
+  messaging:
+    outgoing:
+      lobby-outbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+      lobby-schema-registration:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+    incoming:
+      game-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: lobby.game.#
+      gpg-inbound:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          durable: true
+        exchange:
+          name: lobby-inbound
+        routing-keys: gpg.#
+      player-connection:
+        connector: smallrye-rabbitmq
+        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        queue:
+          name: player-connection-${random.uuid}
+          exclusive: true
+          auto-delete: true
+        exchange:
+          name: player-connection
+          durable: true
+
+"%test":
+  quarkus:
+    scheduler:
+      enabled: false
+    log:
+      console:
+        json:
+          enabled: false
+      category:
+        "com.faforever":
+          level: DEBUG
+        "io.quarkus.websockets.next.traffic":
+          level: DEBUG
+
+"%dev":
+  quarkus:
+    live-reload:
+      instrumentation: true
+    log:
+      console:
+        json:
+          enabled: false
+      category:
+        "com.faforever":
+          level: DEBUG
+        "io.quarkus.websockets.next.traffic":
+          level: DEBUG
+    websockets-next:
+      server:
+        traffic-logging:
+          enabled: true
+    hibernate-orm:
+      log:
+        sql: true
