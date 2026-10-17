@@ -1,4 +1,4 @@
 @NullMarked
-package com.faforever.server.messagebroker;
+package com.faforever.server.message.service;
 
 import org.jspecify.annotations.NullMarked;

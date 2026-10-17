@@ -9,7 +9,7 @@ import com.faforever.server.message.client.dto.GameType;
 import com.faforever.server.message.client.dto.GameVisibility;
 import com.faforever.server.message.service.InboundLobbyMessage;
 import com.faforever.server.message.service.OutboundLobbyMessage;
-import com.faforever.server.message.service.PlayerConnectionDetails;
+import com.faforever.server.message.service.PlayerSessionStatus;
 import com.faforever.server.player.FriendOrFoeRepository;
 import com.faforever.server.player.Player;
 import com.faforever.server.player.PlayerRepository;
@@ -76,10 +76,10 @@ public class GameService {
 
     @Incoming("player-connection")
     @RunOnVirtualThread
-    void handlePlayerConnectionDetails(PlayerConnectionDetails playerConnectionDetails) {
-        long sessionId = playerConnectionDetails.sessionId();
-        int playerId = playerConnectionDetails.playerId();
-        if (playerConnectionDetails.connected()) {
+    void handlePlayerSessionStatus(PlayerSessionStatus playerSessionStatus) {
+        long sessionId = playerSessionStatus.sessionId();
+        int playerId = playerSessionStatus.playerId();
+        if (playerSessionStatus.connected()) {
             Player player = playerIdMap.computeIfAbsent(playerId, playerRepository::loadPlayer);
             Player existingPlayer = sessionPlayerIdMap.putIfAbsent(sessionId, player);
             sendGamesToSession(sessionId);
@@ -247,8 +247,13 @@ public class GameService {
     void updatePlayerLeaderboardRatings() {
         OffsetDateTime currentRatingUpdateTime = lastRatingUpdateTime;
         lastRatingUpdateTime = OffsetDateTime.now();
+        Set<Integer> playerIds = Set.copyOf(playerIdMap.keySet());
+        if (playerIds.isEmpty()) {
+            return;
+        }
+
         Map<Integer, Set<LeaderboardRating>> playerIdRatingMap = leaderboardRatingRepository.loadUpdatedLeaderboardRatings(
-                Set.copyOf(playerIdMap.keySet()), currentRatingUpdateTime);
+                playerIds, currentRatingUpdateTime);
 
         playerIdRatingMap.forEach((playerId, newLeaderboardRatings) -> {
             Player player = playerIdMap.get(playerId);

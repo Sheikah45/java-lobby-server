@@ -12,12 +12,22 @@ import java.util.Map;
 public sealed interface AdminMessage {
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
-    @JsonSubTypes({@JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = "notice"),})
+    @JsonSubTypes({@JsonSubTypes.Type(value = AdminMessage.NoticeInfo.class, name = NoticeInfo.COMMAND),})
     sealed interface Server extends AdminMessage, LobbyMessage.Server {}
 
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "command")
-    @JsonSubTypes({@JsonSubTypes.Type(value = Client.class, name = "admin"),})
-    sealed interface Client extends AdminMessage, LobbyMessage.Client {}
+    @JsonSubTypes({@JsonSubTypes.Type(value = Client.class, name = Client.COMMAND),})
+    sealed interface Client extends AdminMessage, LobbyMessage.Client {
+
+        String COMMAND = "admin";
+
+        default String command() {
+            return COMMAND;
+        }
+
+        @JsonProperty("request_id")
+        String requestId();
+    }
 
     enum Action {
         @JsonProperty("broadcast") BROADCAST,
@@ -26,46 +36,53 @@ public sealed interface AdminMessage {
     }
 
     @JsonCreator
-    static Client of(@JsonProperty("action") Action action, @JsonAnySetter Map<String, String> properties) {
+    static Client of(@JsonProperty("request_id") String requestId, @JsonProperty("action") Action action, @JsonProperty("message") @Nullable String message, @JsonProperty("user_id") @Nullable Integer playerId) {
         return switch (action) {
             case BROADCAST -> {
-                String message = properties.get("message");
                 if (message == null) {
                     throw new IllegalArgumentException("Missing required property `message`");
                 }
-                yield new BroadcastRequest(message);
+                yield new BroadcastRequest(requestId, message);
             }
             case CLOSE_GAME -> {
-                String userId = properties.get("user_id");
-                if (userId == null) {
+                if (playerId == null) {
                     throw new IllegalArgumentException("Missing required property `user_id`");
                 }
-                yield new ClosePlayerGameRequest(Integer.parseInt(userId));
+                yield new ClosePlayerGameRequest(requestId, playerId);
             }
             case CLOSE_LOBBY -> {
-                String userId = properties.get("user_id");
-                if (userId == null) {
+                if (playerId == null) {
                     throw new IllegalArgumentException("Missing required property `user_id`");
                 }
-                yield new KickPlayerRequest(Integer.parseInt(userId));
+                yield new KickPlayerRequest(requestId, playerId);
             }
         };
     }
 
-    record BroadcastRequest(String message) implements Client {}
+    record BroadcastRequest(String requestId, String message) implements Client {}
 
     record ClosePlayerGameRequest(
+            String requestId,
             int playerId
     ) implements Client {}
 
     record KickPlayerRequest(
+            String requestId,
             int playerId
     ) implements Client {}
 
     record NoticeInfo(
             @Nullable String message,
             Style style
-    ) implements Server, LobbyMessage.Broadcast {}
+    ) implements Server, LobbyMessage.Broadcast {
+
+        public static final String COMMAND = "notice";
+
+        @Override
+        public String command() {
+            return COMMAND;
+        }
+    }
 
     enum Style {
         @JsonProperty("info") INFO,

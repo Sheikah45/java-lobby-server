@@ -1,14 +1,11 @@
-package com.faforever.server.message.interceptor;
+package com.faforever.server.interceptor.message.util;
 
-import io.smallrye.common.annotation.Identifier;
 import io.smallrye.reactive.messaging.OutgoingInterceptor;
 import io.smallrye.reactive.messaging.rabbitmq.OutgoingRabbitMQMetadata;
-import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
-@ApplicationScoped
-@Identifier("lobby-schema-registration")
-public class LobbySchemaRegistrationOutgoingInterceptor implements OutgoingInterceptor {
+//Used to ensure all rabbitmq messages are persistent
+public class PersistentRabbitMQOutgoingInterceptor implements OutgoingInterceptor {
 
     @Override
     public void onMessageAck(Message<?> message) {

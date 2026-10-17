@@ -1,14 +1,17 @@
-package com.faforever.server.message.interceptor;
+package com.faforever.server.interceptor.message.util;
 
-import io.smallrye.common.annotation.Identifier;
 import io.smallrye.reactive.messaging.OutgoingInterceptor;
 import io.smallrye.reactive.messaging.rabbitmq.OutgoingRabbitMQMetadata;
-import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
-@ApplicationScoped
-@Identifier("lobby-outbound")
-public class LobbyOutboundOutgoingInterceptor implements OutgoingInterceptor {
+//Used to ensure all rabbitmq messages have reply-to
+public class ReplyToRabbitMQOutgoingInterceptor implements OutgoingInterceptor {
+
+    private final String queueName;
+
+    public ReplyToRabbitMQOutgoingInterceptor(String queueName) {
+        this.queueName = queueName;
+    }
 
     @Override
     public void onMessageAck(Message<?> message) {
@@ -25,7 +28,7 @@ public class LobbyOutboundOutgoingInterceptor implements OutgoingInterceptor {
         OutgoingRabbitMQMetadata newMetadata = message.getMetadata(OutgoingRabbitMQMetadata.class)
                                                       .map(OutgoingRabbitMQMetadata::from)
                                                       .orElseGet(OutgoingRabbitMQMetadata::builder)
-                                                      .withDeliveryMode(2)
+                                                      .withReplyTo(queueName)
                                                       .build();
         return message.addMetadata(newMetadata);
     }

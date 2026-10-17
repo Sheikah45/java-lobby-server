@@ -1,6 +1,6 @@
 package com.faforever.server.messagebroker;
 
-import com.faforever.server.message.service.PlayerConnectionDetails;
+import com.faforever.server.message.service.PlayerSessionStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -14,6 +14,6 @@ public interface MessageBrokerAPIClient {
 
     @Path("/internal/api/sessions")
     @GET
-    Collection<PlayerConnectionDetails> getActiveSessions();
+    Collection<PlayerSessionStatus> getActiveSessions();
 
 }

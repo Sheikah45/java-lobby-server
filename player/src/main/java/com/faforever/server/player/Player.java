@@ -12,7 +12,6 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -31,9 +30,9 @@ public class Player {
     private @Nullable Avatar avatar;
 
     private final Map<Leaderboard, LeaderboardRating> leaderboardRatings = new ConcurrentHashMap<>();
-    private final Set<Integer> friendIds = ConcurrentHashMap.newKeySet();
-    private final Set<Integer> foeIds = ConcurrentHashMap.newKeySet();
-    private final Set<Long> sessionIds = ConcurrentHashMap.newKeySet();
+
+    @Getter
+    private State state = State.ONLINE;
 
     public Player(int id, String username) {
         this.id = id;
@@ -61,48 +60,11 @@ public class Player {
                                                                        })
                                                                        .collect(Collectors.toSet());
         player.updateLeaderboardRatings(leaderboardRatings);
-        playerEntity.getFriendOrFoes().forEach(friendOrFoe -> {
-            switch (friendOrFoe.getStatus()) {
-                case FOE -> player.addFoe(friendOrFoe.getId().subjectId());
-                case FRIEND -> player.addFriend(friendOrFoe.getId().subjectId());
-            }
-        });
         return player;
     }
 
-    public State getState() {
-        return State.ONLINE;
-    }
-
-    void addFriend(int playerId) {
-        friendIds.add(playerId);
-        foeIds.remove(playerId);
-    }
-
-    public boolean isFriend(int playerId) {
-        return friendIds.contains(playerId);
-    }
-
-    Set<Integer> getFriendIds() {
-        return Set.copyOf(friendIds);
-    }
-
-    void addFoe(int playerId) {
-        foeIds.add(playerId);
-        friendIds.remove(playerId);
-    }
-
-    public boolean isFoe(int playerId) {
-        return foeIds.contains(playerId);
-    }
-
-    void removeFriendOrFoe(int playerId) {
-        foeIds.remove(playerId);
-        friendIds.remove(playerId);
-    }
-
-    Set<Integer> getFoeIds() {
-        return Set.copyOf(foeIds);
+    public void markOffline() {
+        state = State.OFFLINE;
     }
 
     public Optional<LeaderboardRating> getRating(Leaderboard leaderboard) {
@@ -159,20 +121,7 @@ public class Player {
         return Optional.ofNullable(avatar);
     }
 
-    void addSession(long sessionId) {
-        sessionIds.add(sessionId);
-    }
-
-    void removeSession(long sessionId) {
-        sessionIds.remove(sessionId);
-    }
-
-    boolean hasNoSession() {
-        return sessionIds.isEmpty();
-    }
-
     public enum State {
         ONLINE, OFFLINE
     }
-
 }

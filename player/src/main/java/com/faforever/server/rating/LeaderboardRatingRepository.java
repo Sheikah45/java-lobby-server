@@ -5,7 +5,9 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
@@ -16,9 +18,9 @@ public class LeaderboardRatingRepository implements PanacheRepositoryBase<Leader
 
     @Transactional
     public Map<Integer, Set<LeaderboardRating>> loadUpdatedLeaderboardRatings(Collection<Integer> playerIds,
-                                                                              OffsetDateTime timeCutoff) {
+                                                                              Instant timeCutoff) {
         return find("player.id in (?1) and updateTime > ?2", playerIds, timeCutoff).stream()
-                                                                                   .collect(Collectors.groupingBy(
+                                                                                                            .collect(Collectors.groupingBy(
                                                                                            leaderboardRatingEntity -> leaderboardRatingEntity.getPlayer()
                                                                                                                                              .getId(),
                                                                                            Collectors.mapping(

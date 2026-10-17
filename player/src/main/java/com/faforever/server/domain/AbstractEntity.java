@@ -16,18 +16,10 @@ import java.time.OffsetDateTime;
 @MappedSuperclass
 @Getter
 @Setter
-public class AbstractEntity {
+abstract class AbstractEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
-
-    @Column(name = "create_time")
-    @CreationTimestamp(source = SourceType.DB)
-    private OffsetDateTime createTime;
-
-    @Column(name = "update_time")
-    @UpdateTimestamp(source = SourceType.DB)
-    private OffsetDateTime updateTime;
 
 }

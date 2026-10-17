@@ -30,35 +30,76 @@ public sealed interface SocialMessage {
 
     record PlayerInfoList(
             Set<PlayerInfo> players
-    ) implements Server, LobbyMessage.Broadcast {}
+    ) implements Server, LobbyMessage.Broadcast {
+        public static final String COMMAND = "player_info";
+
+        @Override
+        public String command() {
+            return COMMAND;
+        }
+    }
 
     record AvatarInfoList(
+            String requestId,
             @JsonProperty("avatarlist") Set<AvatarInfo> avatars
-    ) implements Server {}
+    ) implements Server {
+        public static final String COMMAND = "avatar";
+
+        @Override
+        public String command() {
+            return COMMAND;
+        }
+    }
 
     record SocialInfo(
-            Collection<String> channels,
+            @JsonProperty("autojoin")Collection<String> channels,
             @JsonProperty("friends") Collection<Integer> friendIds,
             @JsonProperty("foes") Collection<Integer> foeIds
     ) implements Server {
+        public static final String COMMAND = "social";
 
-        @JsonProperty("autojoin")
-        Collection<String> autojoin() {
-            return channels;
+        @Override
+        public String command() {
+            return COMMAND;
         }
     }
 
     record SocialAddRequest(
+            String requestId,
             @JsonProperty("friend") @Nullable Integer friendId,
             @JsonProperty("foe") @Nullable Integer foeId
-    ) implements Client {}
+    ) implements Client {
+        public static final String COMMAND = "social_add";
+
+        @Override
+        public String command() {
+            return COMMAND;
+        }
+    }
 
     record SocialRemoveRequest(
+            String requestId,
             @JsonProperty("friend") @Nullable Integer friendId,
             @JsonProperty("foe") @Nullable Integer foeId
-    ) implements Client {}
+    ) implements Client {
+        public static final String COMMAND = "social_remove";
+
+        @Override
+        public String command() {
+            return COMMAND;
+        }
+    }
 
     sealed interface AvatarRequest extends Client {
+        String COMMAND = "avatar";
+
+        @Override
+        default String command() {
+            return COMMAND;
+        }
+
+        @JsonProperty("request_id")
+        String requestId();
 
         enum Action {
             @JsonProperty("select") SELECT,
@@ -66,23 +107,22 @@ public sealed interface SocialMessage {
         }
 
         @JsonCreator
-        static AvatarRequest of(@JsonProperty("action") Action action, @JsonAnySetter Map<String, String> properties) {
+        static AvatarRequest of(@JsonProperty("request_id") String requestId, @JsonProperty("action") Action action, @JsonProperty("avatar") @Nullable String avatarUrl) {
             return switch (action) {
-                case LIST_AVATAR -> new ListAvatarsRequest();
-                case SELECT -> {
-                    String avatarUrl = properties.get("avatar");
-                    yield avatarUrl == null ? new RemoveAvatarRequest() : new SelectAvatarRequest(avatarUrl);
-                }
+                case LIST_AVATAR -> new ListAvatarsRequest(requestId);
+                case SELECT ->
+                        avatarUrl == null ? new RemoveAvatarRequest(requestId) : new SelectAvatarRequest(requestId, avatarUrl);
             };
         }
 
     }
 
-    record ListAvatarsRequest() implements AvatarRequest {}
+    record ListAvatarsRequest(String requestId) implements AvatarRequest {}
 
     record SelectAvatarRequest(
-            @JsonProperty("avatar") String avatarUrl
+            String requestId,
+            String avatarUrl
     ) implements AvatarRequest {}
 
-    record RemoveAvatarRequest() implements AvatarRequest {}
+    record RemoveAvatarRequest(String requestId) implements AvatarRequest {}
 }

@@ -40,10 +40,6 @@ public class PlayerEntity extends AbstractEntity {
     @SQLJoinTableRestriction("expires_at is null or expires_at < current_timestamp and selected = true")
     private AvatarEntity selectedAvatar;
 
-    @OneToMany
-    @JoinColumn(name = "user_id")
-    private Set<FriendOrFoeEntity> friendOrFoes = new HashSet<>();
-
     @OneToMany(mappedBy = "player")
     private Set<LeaderboardRatingEntity> leaderboardRatings = new HashSet<>();
 }

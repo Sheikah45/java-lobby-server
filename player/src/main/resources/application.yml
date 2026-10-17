@@ -23,43 +23,66 @@ rabbitmq-host: ${RABBITMQ_HOST:localhost}
 rabbitmq-port: ${RABBITMQ_PORT:5672}
 rabbitmq-username: ${RABBITMQ_USER:faf-lobby-server}
 rabbitmq-password: ${RABBITMQ_PASSWORD:banana}
+rabbitmq-virtual-host: ${RABBITMQ_VHOST:/faf-core}
+
+faf:
+  instance-id: ${HOSTNAME:local}
 
 mp:
   messaging:
     outgoing:
       lobby-outbound:
         connector: smallrye-rabbitmq
-        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: lobby.message.outbound
       lobby-schema-registration:
         connector: smallrye-rabbitmq
-        virtual-host: ${RABBITMQ_VHOST:/faf-core}
+        exchange:
+          name: lobby.schema.register
+      player-connection-request:
+        connector: smallrye-rabbitmq
+        exchange:
+          name: lobby.session.request
     incoming:
       social-inbound:
         connector: smallrye-rabbitmq
-        virtual-host: ${RABBITMQ_VHOST:/faf-core}
         queue:
+          name: player.message.social.${faf.instance-id}
+          exclusive: true
           durable: true
+          auto-delete: true
         exchange:
-          name: lobby-inbound
+          name: lobby.message.inbound
         routing-keys: lobby.social.#
       admin-inbound:
         connector: smallrye-rabbitmq
-        virtual-host: ${RABBITMQ_VHOST:/faf-core}
         queue:
-          durable: true
-        exchange:
-          name: lobby-inbound
-        routing-keys: lobby.admin.#
-      player-connection:
-        connector: smallrye-rabbitmq
-        virtual-host: ${RABBITMQ_VHOST:/faf-core}
-        queue:
-          name: player-connection-${random.uuid}
+          name: player.message.admin.${faf.instance-id}
           exclusive: true
+          durable: true
           auto-delete: true
         exchange:
-          name: player-connection
+          name: lobby.message.inbound
+        routing-keys: lobby.admin.#
+      player-connection-response:
+        connector: smallrye-rabbitmq
+        queue:
+          name: player.session.state.${faf.instance-id}
+          exclusive: true
           durable: true
+          auto-delete: true
+        exchange:
+          name: lobby.session.state
+          durable: true
+      lobby-schema-request:
+        connector: smallrye-rabbitmq
+        exchange:
+          name: lobby.schema.request
+        queue:
+          name: player.schema.request.${faf.instance-id}
+          exclusive: true
+          durable: true
+          auto-delete: true
 
 "%test":
   quarkus:
@@ -74,20 +97,6 @@ mp:
           level: DEBUG
         "io.quarkus.websockets.next.traffic":
           level: DEBUG
-  mp:
-    messaging:
-      outgoing:
-        lobby-outbound:
-          connector: smallrye-testing
-        lobby-schema-registration:
-          connector: smallrye-testing
-      incoming:
-        social-inbound:
-          connector: smallrye-testing
-        admin-inbound:
-          connector: smallrye-testing
-        player-connection:
-          connector: smallrye-testing
 
 "%dev":
   quarkus:

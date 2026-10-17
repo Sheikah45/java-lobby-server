@@ -12,7 +12,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "leaderboard_rating")
-public class LeaderboardRatingEntity extends AbstractEntity {
+public class LeaderboardRatingEntity extends TimeTrackedEntity {
 
     @ManyToOne
     @JoinColumn(name = "login_id")
